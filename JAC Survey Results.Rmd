@@ -17,15 +17,6 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # 1.) Summary of responses/what's presented: Include table w/residency status. Total # submissions (include completes and partials), removed non-resident/visitor (include #) surveys for this purpose 
 ### 2.) Make histogram of duplicate IP's, state the ways we limited the survey responses (one per device and CAPTCHA) 
-
-# 3.) In which area do you live Q
-          # - re-do as bar plot w/ table
-          # - include table of residents by location and add column with 2020 census data by location
-          # - reassign 'other' category (delete non-Jeffco, keep unassigned as 'other')
-# 4.) What is your age?
-        # - re-do as bar plot (percentage - scale to 100)
-        # - table of column sums across age groups, county-wide - include data on age distribution from census data
-        # require some manual review/edits - adjust non-numeric entries
 # 5.) how important is it to you to have an aquatic facility?
         # - barplot (percentages) w/table (numbers and percentages)
 # 6.) swimming ability question
@@ -113,6 +104,10 @@ ResidentSurvey.dat <- ResidentSurvey.dat[,10:92]
 ```
 
 ## Question 3. In which city or area do you live?
+# 3.) In which area do you live Q
+         To DO:
+          # - include table of residents by location and add column with 2020 census data by location
+          # - reassign 'other' category (delete non-Jeffco, keep unassigned as 'other')
 
 ```{r}
 # creates figure
@@ -201,3 +196,138 @@ gtsave(table_gt, here::here("tables", "City_Area_Table.html"))
 webshot(here::here("tables", "City_Area_Table.html"), here::here("tables", "City_Area_Table.png"), vwidth = 800, vheight = 600)
 ```
 
+# 4.) What is your age?
+        # - re-do as bar plot (percentage - scale to 100)
+        # - table of column sums across age groups, county-wide - include data on age distribution from census data
+        # require some manual review/edits - adjust non-numeric entries
+```{r}
+# read-in Age Census Data and summarize to align with survey age bins
+age_census <- read.csv(here("data","AquaticsSurveyAgeGroup_AllData.csv"))
+
+# Summarize age census data based on these bins
+age_summary <- data.frame(
+  Age = c("15-19","18-34*", "35-54", "55-64", "65-74", "75+"),
+  Census_2020 = c(sum(age_census$X2020.Census[age_census$Age.Group %in% c("15_19")]),
+                   sum(age_census$X2020.Census[age_census$Age.Group %in% c("18_24", "25_29", "30_34")]), 
+                   sum(age_census$X2020.Census[age_census$Age.Group %in% c("35_39", "40_44", "45_49", "50_54")]), 
+                   sum(age_census$X2020.Census[age_census$Age.Group %in% c("55_59", "60_64")]), 
+                   sum(age_census$X2020.Census[age_census$Age.Group %in% c("65_69", "70_74")]), 
+                   sum(age_census$X2020.Census[age_census$Age.Group %in% c("75_79", "80_84", "85+")])
+  ),
+  OFM.Est_2024 = c(sum(age_census$X2024.OFM.Estimate[age_census$Age.Group %in% c("15_19")]), 
+                    sum(age_census$X2024.OFM.Estimate[age_census$Age.Group %in% c("18_24", "25_29", "30_34")]),
+                    sum(age_census$X2024.OFM.Estimate[age_census$Age.Group %in% c("35_39", "40_44", "45_49", "50_54")]), 
+                    sum(age_census$X2024.OFM.Estimate[age_census$Age.Group %in% c("55_59", "60_64")]), 
+                    sum(age_census$X2024.OFM.Estimate[age_census$Age.Group %in% c("65_69", "70_74")]), 
+                    sum(age_census$X2024.OFM.Estimate[age_census$Age.Group %in% c("75_79", "80_84", "85+")])
+  )
+)
+
+# summarise and format age distribution data
+
+# drop the blank entries
+ResidentSurvey.dat <- filter(ResidentSurvey.dat, Age != "")
+
+# Count the occurrences of each unique 'City.area'
+age_counts <- as.data.frame(table(ResidentSurvey.dat$Age))
+colnames(age_counts) <- c("Age", "Respondents")
+age_counts <- age_counts %>%
+ mutate(Age = as.character(Age),  # Convert to character
+         Age = ifelse(Age == "18-34", "18-34*", Age))  # Modify the specific row
+
+# add columns of census data, and row where categories don't overlap perfectly
+data <- age_counts %>%
+          merge(age_summary, by = "Age")%>%
+          #calculate proprtions by category
+          mutate(SurveyProportion = round(Respondents/sum(Respondents),digits = 2))%>%
+          mutate(CensusProportion = round(Census_2020/sum(Census_2020),digits=2))%>%
+          mutate(CensusProportion_2024 = round(OFM.Est_2024/sum(OFM.Est_2024),digits=2))%>%
+          #drop 2024 OFM estimates for simplicity?
+          select(Age,Respondents,Census_2020,SurveyProportion,CensusProportion)
+
+```
+        
+```{r}
+# creates figure
+
+# Create a bar plot with a colorblind-friendly palette
+data_long <- data %>%
+  pivot_longer(cols = c(SurveyProportion, CensusProportion),
+               names_to = "ProportionType", 
+               values_to = "Proportion")
+
+# Create the plot
+plot <- ggplot(data_long, aes(x = Age, y = Proportion, fill = ProportionType)) +
+  geom_bar(stat = "identity", position = "dodge") +  # Dodge to separate the bars
+  scale_fill_viridis(discrete = TRUE) +  # Colorblind-friendly palette
+  labs(title = "Survey Responses vs 2020 Census Data by Age Range",
+       x = "Age Range",
+       y = "Proportion",
+       fill = "Proportion Type") +  # Add a legend title for clarity
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels
+
+# Print the plot
+print(plot)
+
+# save figure with fixed dimensions to standardize w/others
+ggsave(here("figures","Age_Distribution_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
+
+```
+        
+        
+```{r}
+
+# create a table using gt package
+# Create a styled table with the required bold and grey lines
+table_gt <- data %>%
+  gt() %>%
+  cols_label(
+    Age = "Age",
+    Respondents = "Responses",
+    Census_2020 = "2020 Census",
+    SurveyProportion = "Survey Proportion",
+    CensusProportion = "Census Proportion"
+  ) %>%
+  # Left-justify the Age column data
+  tab_style(
+    style = cell_text(align = "center"),
+    locations = cells_body(columns = c("Age", "Respondents","Census_2020","SurveyProportion","CensusProportion"))
+  ) %>%
+  # Left-justify the "Age" column name
+  tab_style(
+    style = cell_text(align = "center"),
+    locations = cells_column_labels(columns = c("Age", "Respondents","Census_2020","SurveyProportion","CensusProportion"))
+  ) %>%
+  # Make column headers bold
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels(columns = c("Age", "Respondents","Census_2020","SurveyProportion","CensusProportion"))
+  ) %>%
+  # Bold the line above the column headers (top of the table)
+  tab_style(
+    style = cell_borders(sides = "top", weight = 2),
+    locations = cells_column_labels(columns = c("Age", "Respondents","Census_2020","SurveyProportion","CensusProportion"))
+  ) %>%
+  # Bold the line below the column headers (under the header row)
+  tab_style(
+    style = cell_borders(sides = "bottom", weight = 2),
+    locations = cells_column_labels(columns = c("Age", "Respondents","Census_2020","SurveyProportion","CensusProportion"))
+  ) %>%
+  # Bold the bottom line of the table (under the last row of data)
+  tab_style(
+    style = cell_borders(sides = "bottom", weight = 2),
+    locations = cells_body(rows = nrow(data), columns = c("Age", "Respondents","Census_2020","SurveyProportion","CensusProportion"))
+  ) 
+
+# Save the table as an HTML file first
+gtsave(table_gt, here::here("tables", "Age_Distribution_Data.html"))
+
+# Convert the HTML table to a PNG file
+webshot(here::here("tables", "Age_Distribution_Data.html"), here::here("tables", "Age_Distribution_Data.png"), vwidth = 800, vheight = 600)
+
+
+
+```
+
+AquaticsSurveyAgeGroup_AllData
