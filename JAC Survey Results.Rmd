@@ -6,7 +6,7 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE)
 ```
 
 # General notes - choose color-blind friendly palette, inlcude number of response stats for each question
@@ -15,13 +15,13 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ##Tables and Figures to Include:
 
-# 1.) Summary of responses/what's presented: Include table w/residency status. Total # submissions (include completes and partials), removed non-resident/visitor (include #) surveys for this purpose 
+
 ### 2.) Make histogram of duplicate IP's, state the ways we limited the survey responses (one per device and CAPTCHA) 
 # 5.) how important is it to you to have an aquatic facility?
-        # - barplot (percentages) w/table (numbers and percentages)
+      # - barplot (percentages) w/table (numbers and percentages)
 # 6.) swimming ability question
       # - sum across each age group and swimming ability category
-      # - create bar chart w/ percentages within each age category
+      # - create bar chart w/ percentages within each age category (stacked bar chart)
       # - include national data on swimming ability?
 # 7.) have you used an aquatic facility in last 2 years?
       # - keep as pie chart
@@ -36,20 +36,25 @@ knitr::opts_chunk$set(echo = TRUE)
       # - select top 5 per age group
       # - work on a way to bin household ages (mean household age) - if we have time??
 # 11.) Non aquatic - exactly the same as above
+      # 
 # 12.) How much more would you use an aquatic facility, if amenities?
       # include pie chart 
       # also include chart with comparison to current useage (bar chart with two colors to show before and after)
 # 13.) non-aquatic amenities
       # include pie chart
-      # include before and after chart as well?
+      # include before and after chart as well - probably not
+      # 
       # what the survey does and doesn't show here
 # 14.) tax Q
       # include as pie-chart w/percentages (raw, unweighted)
       # bar chart by geographic area 
-      # bar chart by person responding to represent voting status?
+      # (don't need this for report) bar chart by person responding to represent voting status?
       # weighted pie-chart overall??
+      # link this to other questions (especially vs support question)
 
  are there other categories that matter and/or other ways to weight the data?
+ 
+ 
 
 
 ```{r}
@@ -65,11 +70,11 @@ library(webshot)
 ## Load and filter data for analysis
 
 ```{r}
-survey.dat <- read.csv(here("data",'JAC_Survey_3.2.25.csv'))
+survey.dat <- read.csv(here("data",'JAC_Survey_3.23.25.csv'))
 
 # replace column names
 colnames.og <- colnames(survey.dat) 
-colnames.new <- c("Response.ID","IP.address","Response.status","Survey.URL","Start.time","Completion.time","Time.taken",
+colnames.new <- c("Response.ID","IP.address","User.agent","Response.status","Survey.URL","Start.time","Completion.time","Time.taken",
                           "Collector","JeffCo.resident","City.area","Age","Under7","7_12","13_18","19_34","35_54","55-64","65_74","75_older","RateNewPoolImportance",
                           "Under7_Non.swimmer","Under7_Beginner","Under7_Intermediate","Under7_Advanced",
                           "7_12_Non.swimmer","7_12_Beginner","7_12_Intermediate","7_12_Advanced",
@@ -90,24 +95,92 @@ colnames.new <- c("Response.ID","IP.address","Response.status","Survey.URL","Sta
                           "RecAmenities_UsageRate","TaxSupport","Comments")
 
 ### Set Column Names and Remove Non-resident/tourist surveys
-ResidentSurvey.dat <- cbind(survey.dat[,1:92],survey.dat[,122])
-colnames(ResidentSurvey.dat) <- colnames.new
-
 ResidentSurvey.dat <- survey.dat %>%
-                        {cbind(.[, 1:92], .[, 122])} %>%
+                        {cbind(.[, 1:93], .[, 123])} %>%
                         filter(Do.you.live.in.Jefferson.County.!="No, I am visiting")%>%
                         setNames(colnames.new)
 
-# drop columns we aren't using
-ResidentSurvey.dat <- ResidentSurvey.dat[,10:92] 
+# create nonresident survey data frame for future analysis
+NonResidentSurvey.dat <- survey.dat %>%
+                        {cbind(.[, 1:93], .[, 123])} %>%
+                        filter(Do.you.live.in.Jefferson.County.=="No, I am visiting")%>%
+                        setNames(colnames.new)
+
+# save comments and survey ID as separate data frame for later
+Comment.dat <- ResidentSurvey.dat %>%
+                  select(Response.ID,Comments)
+
+# drop the comment column in working data frame
+ResidentSurvey.dat <- ResidentSurvey.dat[, -c(3,5:9,123)] 
+
 
 ```
+
+# 1.) Summary of responses/what's presented: Include table w/residency status. Total # submissions (include completes and partials), removed non-resident/visitor (include #) surveys for this purpose 
+
+```{r}
+
+Res.responses <- as.data.frame(table(ResidentSurvey.dat$Response.status))
+Nonres.responses <- as.data.frame(table(NonResidentSurvey.dat$Response.status))
+
+Total.responses <- data.frame(Res.responses$Var1,Res.responses$Freq,Nonres.responses$Freq)
+colnames(Total.responses) <- c("Survey Status","Resident","Non-resident")
+data <- Total.responses
+num.rows <- dim(data)[1]
+
+
+# create a table using gt package
+# Create a styled table with the required bold and grey lines
+table_gt <- data %>%
+  gt() %>%
+  # Left-justify the first/row label column data
+  tab_style(
+    style = cell_text(align = "left"),
+    locations = cells_body(columns = colnames(data)[1])
+  ) %>%
+  # Left-justify the first/row label column name
+  tab_style(
+    style = cell_text(align = "left"),
+    locations = cells_column_labels(columns = colnames(data)[1])
+  ) %>%
+   # Center the rest of the table data 
+  tab_style(
+    style = cell_text(align = "center"),
+    locations = cells_body(columns = colnames(data)[2:length(colnames(data))])
+  ) %>%
+  # Center the rest of the table column names
+  tab_style(
+    style = cell_text(align = "left"),
+    locations = cells_column_labels(columns = colnames(data)[2:length(colnames(data))])
+  ) 
+
+# 
+# Save the table as an HTML file first
+gtsave(table_gt, here::here("tables", "SurveyStatusTable.html"))
+
+# Convert the HTML table to a PNG file
+webshot(here::here("tables", "SurveyStatusTable.html"), here::here("tables", "SurveyStatusTable.png"))
+
+# Save as RTF as an alternative, which may be easier to edit in document
+gtsave(table_gt, here::here("tables","SurveyStatusTable.rtf"))
+
+```
+
+
+```
+
 
 ## Question 3. In which city or area do you live?
 # 3.) In which area do you live Q
          To DO:
           # - include table of residents by location and add column with 2020 census data by location
           # - reassign 'other' category (delete non-Jeffco, keep unassigned as 'other')
+          # Create these figures by TOTAL HOUSEHOLD AGES
+          # NOTE: Kevin provided a different number for the WEST END in and email
+          # Explore different visualizations that include both geo area and responses on same figure, or multiple figures to break it up
+```{r}
+include census data from Kevin; he provided numbers from 2020 survey broken down by the same 
+```
 
 ```{r}
 # creates figure
@@ -197,10 +270,14 @@ webshot(here::here("tables", "City_Area_Table.html"), here::here("tables", "City
 ```
 
 # 4.) What is your age?
+        TO DO LIST
         # - re-do as bar plot (percentage - scale to 100)
         # - table of column sums across age groups, county-wide - include data on age distribution from census data
         # require some manual review/edits - adjust non-numeric entries
+        # also include a figure that displays ALL of the people in a household
+        # SWITCH TO 2024 ESTIMATE Data
 ```{r}
+# 
 # read-in Age Census Data and summarize to align with survey age bins
 age_census <- read.csv(here("data","AquaticsSurveyAgeGroup_AllData.csv"))
 
