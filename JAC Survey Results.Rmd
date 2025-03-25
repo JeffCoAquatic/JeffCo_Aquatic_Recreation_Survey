@@ -15,14 +15,6 @@ knitr::opts_chunk$set(echo = FALSE)
 
 ##Tables and Figures to Include:
 
-
-### 2.) Make histogram of duplicate IP's, state the ways we limited the survey responses (one per device and CAPTCHA) 
-# 5.) how important is it to you to have an aquatic facility?
-      # - barplot (percentages) w/table (numbers and percentages)
-# 6.) swimming ability question
-      # - sum across each age group and swimming ability category
-      # - create bar chart w/ percentages within each age category (stacked bar chart)
-      # - include national data on swimming ability?
 # 7.) have you used an aquatic facility in last 2 years?
       # - keep as pie chart
 # 8.) which ones did you use?
@@ -165,6 +157,34 @@ webshot(here::here("tables", "SurveyStatusTable.html"), here::here("tables", "Su
 gtsave(table_gt, here::here("tables","SurveyStatusTable.rtf"))
 
 ```
+
+
+```
+### 2.) Make histogram of duplicate IP's, state the ways we limited the survey responses (one per device and CAPTCHA) 
+
+```{r}
+
+ip_freq <- table(ResidentSurvey.dat$IP.address)
+
+# Convert the frequency table to a data frame
+ip_freq_df <- as.data.frame(ip_freq)
+colnames(ip_freq_df) <- c("IP.address", "Frequency")
+
+# Plot the histogram using ggplot
+ggplot(ip_freq_df, aes(x = Frequency)) +
+  geom_histogram(binwidth = 1, fill = "skyblue", color = "black") +
+  labs(x = "IP address replicates", y = "Frequency") +
+  theme_minimal()
+  
+# Count the frequency of each unique IP address
+ip_freq <- table(ResidentSurvey.dat$IP.address)
+
+# Count how many IP addresses were seen 1 time, 2 times, etc.
+freq_count <- table(ip_freq)
+
+# Convert the result to a data frame
+freq_count_df <- as.data.frame(freq_count)
+colnames(freq_count_df) <- c("Times_seen", "Number_of_IPs")
 
 
 ```
@@ -407,4 +427,128 @@ webshot(here::here("tables", "Age_Distribution_Data.html"), here::here("tables",
 
 ```
 
-AquaticsSurveyAgeGroup_AllData
+
+# 5.) how important is it to you to have an aquatic facility?
+      # - barplot (percentages) w/table (numbers and percentages)
+      
+```{r}
+
+#remove skipped responses
+Q5.dat <- filter(ResidentSurvey.dat,RateNewPoolImportance !="")
+
+Pool.Importance <- table(Q5.dat$RateNewPoolImportance)
+Pool.Importance <- as.data.frame(Pool.Importance)
+colnames(Pool.Importance) <- c("ImportanceRank","Frequency")
+
+# Reorder by the frequency (from most to least frequent)
+# Sort by Frequency in descending order and reorder ImportanceRank
+Pool.Importance <- Pool.Importance %>%
+  arrange(desc(Frequency)) %>%
+  mutate(ImportanceRank = factor(ImportanceRank, levels = ImportanceRank))
+
+
+# Create the plot
+plot <- ggplot(Pool.Importance, aes(x = ImportanceRank, y = Frequency, fill = "ImportanceRank")) +
+  geom_bar(stat = "identity", position = "dodge") +  # Dodge to separate the bars
+  scale_fill_viridis(discrete = TRUE) +  # Colorblind-friendly palette
+  labs(title = "Question 5: Ranking Pool Importance",
+       x = "",
+       y = "Frequency",
+       fill = "Level of Importance") +  # Add a legend title for clarity
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 12,angle = 45, hjust = 1))  # Rotate x-axis labels
+
+# Print the plot
+print(plot)
+
+
+```
+      
+
+# 6.) swimming ability question
+      # - sum across each age group and swimming ability category
+      # - create bar chart w/ percentages within each age category (stacked bar chart)
+      # - include national data on swimming ability?      
+
+```{r}
+# summarize the data
+library(reshape2)
+Q6.dat <- ResidentSurvey.dat[,16:47]
+Q6.dat <- colSums(Q6.dat,na.rm=TRUE)
+
+# Reshape the data from wide to long format
+AgeAbility <- names(Q6.dat)
+long.data <- melt(Q6.dat)
+
+#merge into a new data frame
+AgeAbility.dat <- data.frame(AgeAbility,long.data$value)
+
+# need to rename some of the AgeAbility variables so ages can be more easily separated from ability
+AgeAbility.dat <- AgeAbility.dat %>%
+  mutate(AgeAbility = recode(AgeAbility,
+    "Under7_Non.swimmer" = "Under7_Non.swimmer",
+    "Under7_Beginner" = "Under7_Beginner",
+    "Under7_Intermediate" = "Under7_Intermediate",
+    "Under7_Advanced" = "Under7_Advanced",
+    "7_12_Non.swimmer" = "7.12_Non.swimmer",
+    "7_12_Beginner" = "7.12_Beginner",
+    "7_12_Intermediate" = "7.12_Intermediate",
+    "7_12_Advanced" = "7.12_Advanced",
+    "13_18_Non.swimmer" = "13.18_Non.swimmer",
+    "13_18_Beginner" = "13.18_Beginner",
+    "13_18_Intermediate" = "13.18_Intermediate",
+    "13_18_Advanced" = "13.18_Advanced",
+    "19_34_Non.swimmer" = "19.34_Non.swimmer",
+    "19_34_Beginner" = "19.34_Beginner",
+    "19_34_Intermediate" = "19.34_Intermediate",
+    "19_34_Advanced" = "19.34_Advanced",
+    "35_54_Non.swimmer" = "35.54_Non.swimmer",
+    "35_54_Beginner" = "35.54_Beginner",
+    "35_54_Intermediate" = "35.54_Intermediate",
+    "35_54_Advanced" = "35.54_Advanced",
+    "55_64_Non.swimmer" = "55.64_Non.swimmer",
+    "55_64_Beginner" = "55.64_Beginner",
+    "55_64_Intermediate" = "55.64_Intermediate",
+    "55_64_Advanced" = "55.64_Advanced",
+    "65_74_Non.swimmer" = "65.74_Non.swimmer",
+    "65_74_Beginner" = "65.74_Beginner",
+    "65_74_Intermediate" = "65.74_Intermediate",
+    "65_74_Advanced" = "65.74_Advanced",
+    "75_older_Non.swimmer" = "75.older_Non.swimmer",
+    "75_older_Beginner" = "75.older_Beginner",
+    "75_older_Intermediate" = "75.older_Intermediate",
+    "75_older_Advanced" = "75.older_Advanced"
+  ))
+
+
+# Split the variable name into AgeGroup and SwimmingAbility
+AgeAbility.df <- AgeAbility.dat %>%
+  separate(AgeAbility, into = c("AgeGroup", "SwimmingAbility"), sep = "_") %>%
+  rename(Number = long.data.value)
+
+# View the resulting data frame
+head(AgeAbility.df)
+
+# Calculate proportions within each AgeGroup
+AgeAbility.df <- AgeAbility.df %>%
+  group_by(AgeGroup) %>%
+  mutate(Proportion = Number / sum(Number))
+
+# Reorder AgeGroup to ensure "Under7" comes first, followed by "7.12", then the rest
+AgeAbility.df$AgeGroup <- factor(AgeAbility.df$AgeGroup, 
+                                 levels = c("Under7", "7.12","13.18","19.34","35.54","55-64","65.74",    "75.older"))
+
+# Reorder SwimmingAbility to ensure 'Non.swimmer' is first, followed by 'Beginner', 'Intermediate', and 'Advanced'
+AgeAbility.df$SwimmingAbility <- factor(AgeAbility.df$SwimmingAbility, 
+                                        levels = c("Advanced","Intermediate","Beginner", "Non.swimmer"))
+
+# Create the bar plot with proportions and the reordered x-axis
+plot <- ggplot(AgeAbility.df, aes(x = AgeGroup, y = Proportion, fill = SwimmingAbility)) +
+  geom_bar(stat = "identity") +  # use stat = "identity" to plot proportions directly
+  scale_fill_viridis(discrete = TRUE) +
+  labs(y = "Proportion", title = "Proportions by Age Group and Swimming Ability") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+      
