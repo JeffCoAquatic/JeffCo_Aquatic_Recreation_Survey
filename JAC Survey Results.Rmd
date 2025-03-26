@@ -15,11 +15,7 @@ knitr::opts_chunk$set(echo = FALSE)
 
 ##Tables and Figures to Include:
 
-# 7.) have you used an aquatic facility in last 2 years?
-      # - keep as pie chart
-# 8.) which ones did you use?
-      # - ordered bar chart (high to low) as percentages
-      # - include list of the 'other'
+
 # 9.) how often do you use an aquatic facility?
       # - keep as pie chart w/custom color palette and percentages on chart
 # 10.) aquatic amenities
@@ -460,7 +456,7 @@ plot <- ggplot(Pool.Importance, aes(x = ImportanceRank, y = Frequency, fill = "I
 
 # Print the plot
 print(plot)
-
+ggsave(here("figures","PoolImportance_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
 
 ```
       
@@ -549,6 +545,52 @@ plot <- ggplot(AgeAbility.df, aes(x = AgeGroup, y = Proportion, fill = SwimmingA
   labs(y = "Proportion", title = "Proportions by Age Group and Swimming Ability") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
+ggsave(here("figures","Age_Ability_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
+```
+
+## 7.) have you used an aquatic facility in last 2 years?
+      - keep as pie chart
+      
+```{r}
+
+# filter and format data for pie chart
+
+Q7.dat <- ResidentSurvey.dat %>%
+      filter(UsedAquaticsPast2Years != "")
+Q7.dat <- table(Q7.dat$UsedAquaticsPast2Years)
+Q7.df <- data.frame(Q7.dat)
+colnames(Q7.df) <- c("Response","Freq")
+
+# Calculate the percentage for each category
+Q7.df <- Q7.df %>%
+      mutate(Percentage = round(100 * Q7.df$Freq / sum(Q7.df$Freq), 1))
+
+# Create the pie chart with percentages
+pie_chart <- ggplot(Q7.df, aes(x = "", y = Percentage, fill = Response)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar(theta = "y") +
+  scale_fill_viridis(discrete = TRUE) +
+  theme_void() +
+  theme(
+    legend.title = element_blank(),  # Remove the legend title
+    plot.title = element_text(size = 16, face = "bold"),  # Increase title size
+    legend.text = element_text(size = 14)  # Increase legend label size
+  ) +
+  labs(title = "Has Used a Pool in the Past 2 Yrs") +
+  geom_text(aes(label = paste(Percentage,"%")), 
+            position = position_stack(vjust = .5), 
+            color = "darkblue", size = 6, fontface = "bold") 
+  
+
+# Print the pie chart
+print(pie_chart)
+
+ggsave(here("figures","Pool_Usage_2yrs.png"), plot = pie_chart, width = 8, height = 6, units = "in", dpi = 300)
+
 ```
 
       
+# 8.) which ones did you use?
+      - ordered bar chart (high to low) as percentages
+      - include list of the 'other'
+
