@@ -15,24 +15,6 @@ knitr::opts_chunk$set(echo = FALSE)
 
 ##Tables and Figures to Include:
 
-
-# 11.) Non aquatic - exactly the same as above
-      # 
-# 12.) How much more would you use an aquatic facility, if amenities?
-      # include pie chart 
-      # also include chart with comparison to current useage (bar chart with two colors to show before and after)
-# 13.) non-aquatic amenities
-      # include pie chart
-      # include before and after chart as well - probably not
-      # 
-      # what the survey does and doesn't show here
-# 14.) tax Q
-      # include as pie-chart w/percentages (raw, unweighted)
-      # bar chart by geographic area 
-      # (don't need this for report) bar chart by person responding to represent voting status?
-      # weighted pie-chart overall??
-      # link this to other questions (especially vs support question)
-
  are there other categories that matter and/or other ways to weight the data?
  
  
@@ -673,14 +655,19 @@ ggsave(here("figures","AquaticFacilityUse_Fig.png"), plot = plot, width = 8, hei
 # Select only the AquaAmenities columns
 AquaAmenities.dat <- ResidentSurvey.dat %>%
   select(starts_with("AquaAmenities_")) %>%
-  select(-last_col()) %>%  # Remove the usage rate column
   # Automatically rename columns using gsub to format them
   rename_with(~ gsub("AquaAmenities_", "", .), starts_with("AquaAmenities_")) %>%
-  
+  select(-UsageRate)%>%
   # Replace underscores with spaces and capitalize appropriately
   rename_with(~ gsub("_", " ", .), everything()) %>%
   rename_with(~ tools::toTitleCase(.), everything())
 
+# Reshape the data into long format
+long_data <- AquaAmenities.dat %>%
+  pivot_longer(cols = everything(), 
+               names_to = "AquaticAmenity", 
+               values_to = "Ranking")
+               
 # Count the occurrences of each ranking for each amenity
 count_data <- long_data %>%
   group_by(AquaticAmenity, Ranking) %>%
@@ -708,18 +695,178 @@ ordered_amenities <- count_data %>%
   pull(AquaticAmenity)
 
 # Plot the stacked bar chart
-ggplot(count_data, aes(x = factor(AquaticAmenity, levels = ordered_amenities), 
+plot <- ggplot(count_data, aes(x = factor(AquaticAmenity, levels = ordered_amenities), 
                        y = Percentage, 
                        fill = Ranking)) +
   geom_bar(stat = "identity", position = "stack") +
   scale_fill_viridis(discrete = TRUE) +  # Use the Viridis color palette for discrete categories
-  labs(title = "Aquatic Amenities: Ranking Categories by Amenity",
-       x = "Aquatic Amenity",
+  labs(title = "Aquatic Amenities by Rank",
+       x = "",
        y = "Percentage (%)",
        fill = "Ranking") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
   
+# Print the plot
+print(plot)
+ggsave(here("figures","AquaticAmenities_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
+```
+
+# 11.) Non aquatic amenities - exactly the same as above
+      
+```{r}
+# Select the Amenities questions only for easier formatting
+# Select only the AquaAmenities columns
+RecAmenities.dat <- ResidentSurvey.dat %>%
+  select(starts_with("RecAmenities_")) %>%
+  # Automatically rename columns using gsub to format them
+  rename_with(~ gsub("RecAmenities_", "", .), starts_with("RecAmenities_")) %>%
+  select(-UsageRate)%>%
+  # Replace underscores with spaces and capitalize appropriately
+  rename_with(~ gsub("_", " ", .), everything()) %>%
+  rename_with(~ tools::toTitleCase(.), everything())
+
+# Reshape the data into long format
+long_data <- RecAmenities.dat %>%
+  pivot_longer(cols = everything(), 
+               names_to = "RecAmenity", 
+               values_to = "Ranking")
+               
+# Count the occurrences of each ranking for each amenity
+count_data <- long_data %>%
+  group_by(RecAmenity, Ranking) %>%
+  count() %>%
+  ungroup()
+  
+# remove blank entries
+count_data <- count_data %>%
+  filter(Ranking != "")
+  
+# Calculate the total count for each amenity
+total_counts <- count_data %>%
+  group_by(RecAmenity) %>%
+  summarize(Total = sum(n))
+
+# Join the total counts with the count data
+count_data <- count_data %>%
+  left_join(total_counts, by = "RecAmenity") %>%
+  mutate(Percentage = n / Total * 100)
+
+# Order the data by the percentage of "Very likely" votes
+ordered_amenities <- count_data %>%
+  filter(Ranking == "Very likely") %>%
+  arrange(desc(Percentage)) %>%
+  pull(RecAmenity)
+
+# Plot the stacked bar chart
+plot <- ggplot(count_data, aes(x = factor(RecAmenity, levels = ordered_amenities), 
+                       y = Percentage, 
+                       fill = Ranking)) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_fill_viridis(discrete = TRUE) +  # Use the Viridis color palette for discrete categories
+  labs(title = "Recreation Amenities by Rank",
+       x = "",
+       y = "Percentage (%)",
+       fill = "Ranking") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  
+# Print the plot
+print(plot)
+ggsave(here("figures","RecAmenities_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
+
 
 ```
+
+# 12.) How much more would you use an aquatic facility, if amenities?
+      # include pie chart 
+      # also include chart with comparison to current useage (bar chart with two colors to show before and after)
+
+
+```{r}
+Usage.dat <- ResidentSurvey.dat %>%
+              select(FacilityUsageRate,
+              AquaAmenities_UsageRate,
+              RecAmenities_UsageRate)
+
+# Transform the data
+long_usage_data <- Usage.dat %>%
+  pivot_longer(cols = c("FacilityUsageRate", "AquaAmenities_UsageRate", "RecAmenities_UsageRate"), 
+               names_to = "UsageCategory", 
+               values_to = "Response") %>%
+  mutate(Response = recode(Response, "Don't use an aquatic facility" = "Never")) %>%
+  filter(Response != "")%>%
+  # Reorder the 'Response' categories
+  mutate(Response = factor(Response, levels = c("More than once a week", "Several times a month", "Less than once a month", "Never")),
+         UsageCategory = recode(UsageCategory, 
+                                "FacilityUsageRate" = "Current Usage Rate",
+                                "AquaAmenities_UsageRate" = "Expected Usage with Aquatic Amenities",
+                                "RecAmenities_UsageRate" = "Expected Usage with Rec Amenities")) %>%
+  # Reorder 'UsageCategory' to ensure it appears as the second factor in the plot
+  mutate(UsageCategory = factor(UsageCategory, levels = c("Current Usage Rate", "Expected Usage with Aquatic Amenities", "Expected Usage with Rec Amenities")))
+
+# Calculate the percentage for each combination of Response and UsageCategory
+long_usage_data_percent <- long_usage_data %>%
+  count(Response, UsageCategory) %>%  # Count occurrences of each combination
+  group_by(Response) %>%
+  mutate(percentage = n / sum(n) * 100) %>%  # Calculate percentage
+  ungroup()  # Remove the grouping after calculation
+
+# Create the plot with percentages on the y-axis
+plot <- ggplot(long_usage_data_percent, aes(x = Response, y = percentage, fill = UsageCategory)) +
+  geom_bar(stat = "identity", position = "dodge") +  # 'dodge' to separate the bars
+  scale_fill_viridis(discrete = TRUE) +  # Colorblind-friendly palette
+  labs(title = "Usage Rate Comparison",
+       x = "",
+       y = "Percentage (%)",
+       fill = "Usage Categories") +  # Add a legend title for clarity
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 12, angle = 45, hjust = 1))  # Rotate x-axis labels
+
+ # Print the plot
+print(plot)
+ggsave(here("figures","UsageRateComparison_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300) 
+  
+  
+  
+#Now plot the percent change
+usage_change_data <- long_usage_data_percent %>%
+  select("Response","UsageCategory", "percentage")%>%
+  filter(UsageCategory %in% c("Current Usage Rate", "Expected Usage with Aquatic Amenities")) %>%
+  pivot_wider(names_from = UsageCategory, values_from = percentage) %>%
+  mutate(percent_change = `Expected Usage with Aquatic Amenities` - `Current Usage Rate`) %>%
+  select(Response, percent_change)
+
+
+plot <-  usage_change_data %>%
+  ggplot(aes(x = Response, y = percent_change, fill = percent_change > 0)) +  
+  geom_bar(stat = "identity", show.legend = TRUE) +
+  labs(title = "Usage Rate Change with Aquatic Amenities",
+       x = "Response Category",
+       y = "Percent Change (%)",
+       fill = "Change Direction") +  
+  scale_fill_viridis(discrete = TRUE, direction = 1, 
+                     labels = c("Negative", "Positive")) +  
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Print the plot
+print(plot)
+ggsave(here("figures","UsageRatePercentChange_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300) 
+   
+  
+  
+```
+
+# 13.) non-aquatic amenities
+      # include pie chart
+      # include before and after chart as well - probably not
+      # 
+      # what the survey does and doesn't show here
+# 14.) tax Q
+      # include as pie-chart w/percentages (raw, unweighted)
+      # bar chart by geographic area 
+      # (don't need this for report) bar chart by person responding to represent voting status?
+      # weighted pie-chart overall??
+      # link this to other questions (especially vs support question)
 
