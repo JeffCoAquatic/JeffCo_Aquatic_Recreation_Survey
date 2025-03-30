@@ -16,13 +16,6 @@ knitr::opts_chunk$set(echo = FALSE)
 ##Tables and Figures to Include:
 
 
-# 9.) how often do you use an aquatic facility?
-      # - keep as pie chart w/custom color palette and percentages on chart
-# 10.) aquatic amenities
-      # - keep as bar chart, reverse order overall
-      # - produce age-based figures as well, may not use in presentation
-      # - select top 5 per age group
-      # - work on a way to bin household ages (mean household age) - if we have time??
 # 11.) Non aquatic - exactly the same as above
       # 
 # 12.) How much more would you use an aquatic facility, if amenities?
@@ -195,7 +188,7 @@ colnames(freq_count_df) <- c("Times_seen", "Number_of_IPs")
           # NOTE: Kevin provided a different number for the WEST END in and email
           # Explore different visualizations that include both geo area and responses on same figure, or multiple figures to break it up
 ```{r}
-include census data from Kevin; he provided numbers from 2020 survey broken down by the same 
+#include census data from Kevin; he provided numbers from 2020 survey broken down by the same 
 ```
 
 ```{r}
@@ -590,7 +583,94 @@ ggsave(here("figures","Pool_Usage_2yrs.png"), plot = pie_chart, width = 8, heigh
 ```
 
       
-# 8.) which ones did you use?
-      - ordered bar chart (high to low) as percentages
-      - include list of the 'other'
+# 8.) which ones did you use? 
+      Still To-Do:
+          - include list of the 'other' pools
+          - shorten pool names for legibility
+          - consider clarity of labels, etc.
+
+```{r}
+
+
+#remove skipped responses
+Q8.dat <- filter(ResidentSurvey.dat,WhichAquaticFacilities != "")
+
+#add columns for each separated response, if needed to keep responses associated w/individual survey entries - this will still need some cleaning
+  # First, split the 'WhichAquaticFacilities' column based on commas
+  #split_data <- ResidentSurvey.dat %>%
+  #  # Separate 'WhichAquaticFacilities' into multiple columns
+  #  separate(WhichAquaticFacilities, into = paste0("place", 1:10), sep = ",", extra = "merge", fill   = #"right")
+
+#create a single column that contains all pools listed across the entire survey
+split_responses <- strsplit(as.character(ResidentSurvey.dat$WhichAquaticFacilities), split = ",")
+  
+# Flatten the list into a single vector
+split_vector <- unlist(split_responses)
+
+#separate Other responses
+facility_vector <- split_vector[!grepl("^Other \\(Please specify\\)", split_vector) ]
+facility_list <- c("Port Angeles SHORE Aquatic Center",
+                    "Sequim Y",
+                    "Silverdale Y", 
+                    "Port Townsend Y/Mountain View Pool", 
+                     "Oak Harbor Community Pool",
+                     "North Kitsap Community Pool",
+                     "Olympic Aquatic Center - Bremerton", 
+                      "Bainbridge Island", 
+                      "Private/HOA pool (e.g. Port Ludlow)")
+
+# Filter the facility_vector based on whether its elements match the desired values
+facilities_clean <- facility_vector[facility_vector %in% facility_list]
+                  
+other_facilities <- split_vector[grepl("^Other \\(Please specify\\)", split_vector) ]
+
+
+Facilities <- table(facilities_clean)
+Facilities <- as.data.frame(Facilities)
+colnames(Facilities) <- c("AquaticFacility","Frequency")
+
+# Reorder by the frequency (from most to least frequently used)
+# Sort by Frequency in descending order and reorder ImportanceRank
+Facilities <- Facilities %>%
+  arrange(desc(Frequency)) %>%
+    mutate(AquaticFacility = factor(AquaticFacility, levels = AquaticFacility))
+
+
+# Create the plot
+plot <- ggplot(Facilities, aes(x = AquaticFacility, y = Frequency, fill = "AquaticFacility")) +
+  geom_bar(stat = "identity", position = "dodge") +  # Dodge to separate the bars
+  scale_fill_viridis(discrete = TRUE) +  # Colorblind-friendly palette
+  labs(title = "Question 8: Aquatic Facilities Used",
+       x = "",
+       y = "Frequency",
+       fill = "")+
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 12,angle = 45, hjust = 1))  # Rotate x-axis labels
+
+# Print the plot
+print(plot)
+ggsave(here("figures","AquaticFacilityUse_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
+
+```
+
+# 9.) how often do you use an aquatic facility?
+      # - keep as pie chart w/custom color palette and percentages on chart
+      
+```{r}
+
+
+
+```
+
+# 10.) aquatic amenities
+      # - keep as bar chart, reverse order overall
+      # - produce age-based figures as well, may not use in presentation
+      # - select top 5 per age group
+      # - work on a way to bin household ages (mean household age) - if we have time??
+      
+```{r}
+
+
+
+```
 
