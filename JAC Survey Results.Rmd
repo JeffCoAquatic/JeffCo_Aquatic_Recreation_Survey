@@ -669,8 +669,57 @@ ggsave(here("figures","AquaticFacilityUse_Fig.png"), plot = plot, width = 8, hei
       # - work on a way to bin household ages (mean household age) - if we have time??
       
 ```{r}
+# Select the Amenities questions only for easier formatting
+# Select only the AquaAmenities columns
+AquaAmenities.dat <- ResidentSurvey.dat %>%
+  select(starts_with("AquaAmenities_")) %>%
+  select(-last_col()) %>%  # Remove the usage rate column
+  # Automatically rename columns using gsub to format them
+  rename_with(~ gsub("AquaAmenities_", "", .), starts_with("AquaAmenities_")) %>%
+  
+  # Replace underscores with spaces and capitalize appropriately
+  rename_with(~ gsub("_", " ", .), everything()) %>%
+  rename_with(~ tools::toTitleCase(.), everything())
 
+# Count the occurrences of each ranking for each amenity
+count_data <- long_data %>%
+  group_by(AquaticAmenity, Ranking) %>%
+  count() %>%
+  ungroup()
+  
+# remove blank entries
+count_data <- count_data %>%
+  filter(Ranking != "")
+  
+# Calculate the total count for each amenity
+total_counts <- count_data %>%
+  group_by(AquaticAmenity) %>%
+  summarize(Total = sum(n))
 
+# Join the total counts with the count data
+count_data <- count_data %>%
+  left_join(total_counts, by = "AquaticAmenity") %>%
+  mutate(Percentage = n / Total * 100)
+
+# Order the data by the percentage of "Very likely" votes
+ordered_amenities <- count_data %>%
+  filter(Ranking == "Very likely") %>%
+  arrange(desc(Percentage)) %>%
+  pull(AquaticAmenity)
+
+# Plot the stacked bar chart
+ggplot(count_data, aes(x = factor(AquaticAmenity, levels = ordered_amenities), 
+                       y = Percentage, 
+                       fill = Ranking)) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_fill_viridis(discrete = TRUE) +  # Use the Viridis color palette for discrete categories
+  labs(title = "Aquatic Amenities: Ranking Categories by Amenity",
+       x = "Aquatic Amenity",
+       y = "Percentage (%)",
+       fill = "Ranking") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  
 
 ```
 
