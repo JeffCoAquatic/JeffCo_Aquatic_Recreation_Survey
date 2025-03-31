@@ -202,7 +202,7 @@ city_area_census <- cbind(city_area_census,proportion,DataSource)
 # Create a bar plot side by side with census data
 plot <- ggplot(city_area_census, aes(x = City.area, y = proportion, fill = DataSource)) +
   geom_bar(stat = "identity", position = "dodge") + 
-  scale_color_viridis(discrete = TRUE) +  # Use a colorblind-friendly palette
+  scale_fill_viridis(discrete = TRUE) +  # Use a colorblind-friendly palette
   labs(title = "Population vs Respondants by Area",
        x = "",
        y = "Percent of Individuals") +
