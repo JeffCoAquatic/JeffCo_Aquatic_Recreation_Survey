@@ -171,23 +171,48 @@ colnames(freq_count_df) <- c("Times_seen", "Number_of_IPs")
           # Explore different visualizations that include both geo area and responses on same figure, or multiple figures to break it up
 ```{r}
 #include census data from Kevin; he provided numbers from 2020 survey broken down by the same 
+census2020.dat <- read.csv(here("data","JeffCoCensus_Area_2020.csv"))
+
 ```
 
 ```{r}
 # creates figure
 
 # filter out 'other' category temporarily; need to go reclassify as possible
-ResidentSurvey.dat <- ResidentSurvey.dat[!grepl("^Other \\(Please specify\\)", ResidentSurvey.dat$City.area), ]
+Q3.dat <- ResidentSurvey.dat[!grepl("^Other \\(Please specify\\)", ResidentSurvey.dat$City.area), ]
 
 # drop the blank entries
-ResidentSurvey.dat <- filter(ResidentSurvey.dat, City.area != "")
+Q3.dat <- filter(Q3.dat, City.area != "")
 
 # Count the occurrences of each unique 'City.area'
-city_area_counts <- table(ResidentSurvey.dat$City.area)
+city_area_counts <- table(Q3.dat$City.area)
 
 # Convert the table to a data frame for ggplot
 city_area_df <- as.data.frame(city_area_counts)
 colnames(city_area_df) <- c("City.area", "Count")
+
+survey_proportion <- round(city_area_df$Count/sum(city_area_df$Count),3)
+census_proportion <- round(census2020.dat$Count/sum(census2020.dat$Count),3)
+proportion <- c(survey_proportion,census_proportion)
+
+DataSource <- c(rep("Survey",dim(city_area_df)[1]),rep("Census",dim(census2020.dat)[1]))
+city_area_census <- rbind(city_area_df,census2020.dat)
+city_area_census <- cbind(city_area_census,proportion,DataSource)
+
+# Create a bar plot side by side with census data
+plot <- ggplot(city_area_census, aes(x = City.area, y = proportion, fill = DataSource)) +
+  geom_bar(stat = "identity", position = "dodge") + 
+  scale_color_viridis(discrete = TRUE) +  # Use a colorblind-friendly palette
+  labs(title = "Population vs Respondants by Area",
+       x = "",
+       y = "Percent of Individuals") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels
+
+print(plot)
+# save figure with fixed dimensions to standardize w/others
+ggsave(here("figures","Census_Survey_Area_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
+
 
 # Create a bar plot with a colorblind-friendly palette
 plot <- ggplot(city_area_df, aes(x = City.area, y = Count, fill = City.area)) +
@@ -816,7 +841,7 @@ long_usage_data_percent <- long_usage_data %>%
 current_usage <- long_usage_data_percent %>%
                 filter(UsageCategory == "Current Usage Rate")
 
-plot <- ggplot(aquatic_usage, aes(x = Response, y = percentage, fill = UsageCategory)) +
+plot <- ggplot(current_usage, aes(x = Response, y = percentage, fill = UsageCategory)) +
   geom_bar(stat = "identity",position = "dodge") +  # 'dodge' to separate the bars
   scale_fill_viridis(discrete = TRUE,direction = 1) +  # Colorblind-friendly palette
   labs(title = "Current Facility Usage Rates",
@@ -828,6 +853,7 @@ plot <- ggplot(aquatic_usage, aes(x = Response, y = percentage, fill = UsageCate
  # Print the plot
 print(plot)
 ggsave(here("figures","CurrentUsage_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300) 
+
 # Create plot with aquatic amenities usage rates only
 aquatic_usage <- long_usage_data_percent %>%
                 filter(UsageCategory == "Expected Usage with Aquatic Amenities")
@@ -912,12 +938,140 @@ ggsave(here("figures","UsageRatePercentChange_Fig.png"), plot = plot, width = 8,
 # 13.) non-aquatic amenities
       # include pie chart
       # include before and after chart as well - probably not
-      # 
-      # what the survey does and doesn't show here
+
+  
 # 14.) tax Q
       # include as pie-chart w/percentages (raw, unweighted)
       # bar chart by geographic area 
       # (don't need this for report) bar chart by person responding to represent voting status?
       # weighted pie-chart overall??
       # link this to other questions (especially vs support question)
+
+```{r}
+tax.dat <- ResidentSurvey.dat %>%
+            select(Response.ID,Age,City.area,RateNewPoolImportance,TaxSupport)
+
+#Create figure of raw response to tax question
+cleaned_data <- tax.dat %>%
+  filter(TaxSupport %in% c("Yes", "No", "I don't know/need more information")) %>%
+  filter(TaxSupport != "" & TaxSupport != "I am not a Jefferson County voter")
+
+# Calculate the percentage of each response in the TaxSupport column
+tax_support_counts <- cleaned_data %>%
+  count(TaxSupport) %>%
+  mutate(percentage = n / sum(n) * 100)
+
+# Plot the pie chart
+# Load necessary libraries
+library(ggplot2)
+library(dplyr)
+
+# Filter the data to remove unwanted responses (empty strings and non-voters)
+cleaned_data <- tax.dat %>%
+  filter(TaxSupport %in% c("Yes", "No", "I don't know/need more information")) %>%
+  filter(TaxSupport != "" & TaxSupport != "I am not a Jefferson County voter")
+
+# Calculate the percentage of each response in the TaxSupport column
+tax_support_counts <- cleaned_data %>%
+  count(TaxSupport) %>%
+  mutate(percentage = n / sum(n) * 100)
+
+
+# Filter the data to remove unwanted responses (empty strings and non-voters)
+cleaned_data <- tax.dat %>%
+  filter(TaxSupport %in% c("Yes", "No", "I don't know/need more information")) %>%
+  filter(TaxSupport != "" & TaxSupport != "I am not a Jefferson County voter")
+
+# Calculate the percentage of each response in the TaxSupport column
+tax_support_counts <- cleaned_data %>%
+  count(TaxSupport) %>%
+  mutate(percentage = n / sum(n) * 100)
+
+# Plot the pie chart with percentages as text and white outlines
+plot <- ggplot(tax_support_counts, aes(x = "", y = percentage, fill = TaxSupport)) +
+  geom_bar(stat = "identity", width = .5, show.legend = TRUE, color = "black") +  # Add white outline to each slice
+  coord_polar(theta = "y") +  # Convert to pie chart
+  scale_fill_viridis(discrete = TRUE) +  # Use viridis color palette
+  labs(title = "Distribution of Tax Support Responses") +  # Title for the pie chart
+  theme_void() +  # Remove background gridlines and axis
+  theme(plot.title = element_text(hjust = 0.5)) +  # Center the title
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), 
+            position = position_stack(vjust = 0.5),  
+            color = "light blue", size = 4,fontface="bold")  # Set text color and size
+
+ggsave(here("figures","TaxSupport_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300) 
+
+```
+
+# create a figure of tax support by geographic area
+
+```{r}
+# filter out 'other' category temporarily; need to go reclassify as possible
+TaxArea_clean.dat <- cleaned_data[!grepl("^Other \\(Please specify\\)", cleaned_data$City.area), ]
+
+# drop the blank entries
+TaxArea.dat <- TaxArea_clean.dat %>%              
+  filter(City.area != "")%>%
+  filter(TaxSupport != "") %>%  
+  group_by(City.area, TaxSupport) %>%
+  summarise(count = n()) %>% 
+  group_by(City.area) %>%
+  mutate(percentage = count / sum(count) * 100) %>%
+  ungroup()
+
+# Order the data by the "yes" votes
+ordered_data <- TaxArea.dat %>%
+  filter(TaxSupport == "Yes") %>%
+  arrange(desc(percentage)) %>%
+  pull(City.area) 
+
+# add West End (no yes votes)
+ordered_data <- c(ordered_data,"West End")
+
+  plot <- TaxArea.dat %>%
+    ggplot(aes(x = factor(City.area, levels = ordered_data),y = percentage, fill = TaxSupport)) +
+        geom_bar(stat = "identity") +  # Create the stacked bar chart
+        scale_fill_viridis(discrete = TRUE) +  
+  labs(title = "Percentage of Tax Support by Area",
+       x = "City Area", 
+       y = "Percentage of Responses",
+       fill = "Tax Support") +  # Label the legend
+  theme_minimal() +  # Use a minimal theme
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+ geom_hline(yintercept = 50, linetype = "dashed", color = "grey", size = 1) 
+
+# Print the plot
+print(plot)
+ggsave(here("figures","TaxSupport_by_Area_percent_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
+
+###########################################
+# produce figure by numbers
+
+# Order the data by the "yes" votes
+ordered_data <- TaxArea.dat %>%
+  filter(TaxSupport == "Yes") %>%
+  arrange(desc(count)) %>%
+  pull(City.area) 
+
+# add West End (no yes votes)
+ordered_data <- c(ordered_data,"West End")
+
+  plot <- TaxArea.dat %>%
+    ggplot(aes(x = factor(City.area, levels = ordered_data),y = count,         fill = TaxSupport)) +
+        geom_bar(stat = "identity") +  # Create the stacked bar chart
+        scale_fill_viridis(discrete = TRUE) +  
+        labs(title = "Tax Support by Area in Numbers",
+       x = "City Area", 
+       y = "Number of Responses",
+       fill = "Tax Support") +  # Label the legend
+       theme_minimal() +  # Use a minimal theme
+       theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Print the plot
+print(plot)
+ggsave(here("figures","TaxSupport_by_Area_number_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
+
+
+
+```
 
