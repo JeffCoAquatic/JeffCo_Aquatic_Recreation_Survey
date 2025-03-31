@@ -812,7 +812,58 @@ long_usage_data_percent <- long_usage_data %>%
   mutate(percentage = n / sum(n) * 100) %>%  # Calculate percentage
   ungroup()  # Remove the grouping after calculation
 
-# Create the plot with percentages on the y-axis
+# Create plot with current amenities usage rates only
+current_usage <- long_usage_data_percent %>%
+                filter(UsageCategory == "Current Usage Rate")
+
+plot <- ggplot(aquatic_usage, aes(x = Response, y = percentage, fill = UsageCategory)) +
+  geom_bar(stat = "identity",position = "dodge") +  # 'dodge' to separate the bars
+  scale_fill_viridis(discrete = TRUE,direction = 1) +  # Colorblind-friendly palette
+  labs(title = "Current Facility Usage Rates",
+       x = "",
+       y = "Percentage (%)") + 
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 12, angle = 45, hjust = 1),legend.position = "none") 
+
+ # Print the plot
+print(plot)
+ggsave(here("figures","CurrentUsage_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300) 
+# Create plot with aquatic amenities usage rates only
+aquatic_usage <- long_usage_data_percent %>%
+                filter(UsageCategory == "Expected Usage with Aquatic Amenities")
+
+plot <- ggplot(aquatic_usage, aes(x = Response, y = percentage, fill = UsageCategory)) +
+  geom_bar(stat = "identity",position = "dodge") +  # 'dodge' to separate the bars
+  scale_fill_viridis(discrete = TRUE,direction = 1) +  # Colorblind-friendly palette
+  labs(title = "Expected Usage with Aquatic Amenities",
+       x = "",
+       y = "Percentage (%)") + 
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 12, angle = 45, hjust = 1),legend.position = "none") 
+
+ # Print the plot
+print(plot)
+ggsave(here("figures","AquaticUsage_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300) 
+
+# Create plot with recreation amenities usage rates only
+rec_usage <- long_usage_data_percent %>%
+                filter(UsageCategory == "Expected Usage with Rec Amenities")
+
+plot <- ggplot(rec_usage, aes(x = Response, y = percentage, fill = UsageCategory)) +
+  geom_bar(stat = "identity",position = "dodge") +  # 'dodge' to separate the bars
+  scale_fill_viridis(discrete = TRUE,direction = 1) +  # Colorblind-friendly palette
+  labs(title = "Expected Usage with Recreation Amenities",
+       x = "",
+       y = "Percentage (%)") + 
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 12, angle = 45, hjust = 1),legend.position = "none") 
+
+ # Print the plot
+print(plot)
+ggsave(here("figures","RecreationUsage_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300) 
+    
+
+# Create plot with percentages on the y-axis and side-by-side comparison bars
 plot <- ggplot(long_usage_data_percent, aes(x = Response, y = percentage, fill = UsageCategory)) +
   geom_bar(stat = "identity", position = "dodge") +  # 'dodge' to separate the bars
   scale_fill_viridis(discrete = TRUE) +  # Colorblind-friendly palette
