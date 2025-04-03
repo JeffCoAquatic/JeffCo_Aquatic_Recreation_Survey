@@ -194,10 +194,55 @@ Q3.dat$`7_12` <- as.numeric(Q3.dat$`7_12`)
 Q3.dat$`13_18`<- as.numeric(Q3.dat$`13_18`)
 Q3.dat$`19_34`<- as.numeric(Q3.dat$`19_34`)
 Q3.dat$`35_54`<- as.numeric(Q3.dat$`35_54`)
-Q3.dat$`55-64`<- as.numeric(Q3.dat$`55-64`)
+Q3.dat$`55_64`<- as.numeric(Q3.dat$`55-64`)
 Q3.dat$`65_74`<- as.numeric(Q3.dat$`65_74`)
 Q3.dat$`75_older`<- as.numeric(Q3.dat$`75_older`)
 
+# calculate individuals by age category
+Under_7 <- sum(Q3.dat$Under7,na.rm=TRUE)
+Age_7_12 <- sum(Q3.dat$'7_12',na.rm=TRUE)
+Age_13_18 <- sum(Q3.dat$'13_18',na.rm=TRUE)
+Age_19_34 <- sum(Q3.dat$'19_34',na.rm=TRUE)
+Age_35_54 <- sum(Q3.dat$'35_54',na.rm=TRUE)
+Age_55_64 <- sum(Q3.dat$'55_64',na.rm=TRUE)
+Age_65_74 <- sum(Q3.dat$'65_74',na.rm=TRUE)
+Age_75_older <- sum(Q3.dat$'75_older',na.rm=TRUE)
+
+FullAgeDist.df <- data.frame(Under_7,Age_7_12,Age_13_18,Age_19_34,Age_35_54,Age_55_64,Age_65_74,Age_75_older)
+
+######################################
+# Create a barplot of the full age distribution of indivs represented by survey:
+# Reshape the data for ggplot (long format)
+FullAgeDist.long <- FullAgeDist.df %>%
+  gather(key = "AgeGroup", value = "Frequency")
+
+# Reorder the AgeGroup factor so it's from youngest to oldest
+FullAgeDist.long$AgeGroup <- factor(FullAgeDist.long$AgeGroup, 
+                                    levels = c("Under_7", "Age_7_12", "Age_13_18", 
+                                               "Age_19_34", "Age_35_54", "Age_55_64", 
+                                               "Age_65_74", "Age_75_older"))
+
+# Create the bar plot with uniform fill color and without the legend
+plot <- ggplot(FullAgeDist.long, aes(x = AgeGroup, y = Frequency)) +
+  geom_bar(stat = "identity", position = "dodge", fill = viridis(1)) +  # Use viridis color palette
+  geom_text(aes(label = Frequency), vjust = -0.3, size = 5, fontface = "bold") +  # Add text labels on top of bars
+  labs(title = "Age Distribution of Surveyed Individuals",
+       x = "Age Group",
+       y = "Frequency") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12, face = "bold"),
+        plot.title = element_text(size = 20, face = "bold"),
+        axis.title.y = element_text(size = 15, face = "bold"),
+        axis.text.y = element_text(size = 12, face = "bold"),
+        legend.position = "none",  # Remove the legend
+        plot.margin = margin(1, 1, 2, 1))  # Add margin at the bottom to prevent cutting off labels
+
+# Display the plot and save to figures folder
+print(plot)
+ggsave(here("figures","AgeDistribution_AllSurveyIndividuals.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
+
+
+#################################################3
 #verify these are the correct columns to sum all age categories
 TotalPeople <- rowSums(Q3.dat[7:13],na.rm=TRUE)
 Q3.dat <- data.frame(Q3.dat,TotalPeople)
