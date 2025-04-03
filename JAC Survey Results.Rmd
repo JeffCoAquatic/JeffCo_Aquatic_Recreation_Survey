@@ -33,7 +33,7 @@ library(webshot)
 ## Load and filter data for analysis
 
 ```{r}
-survey.dat <- read.csv(here("data",'JAC_Survey_3.23.25.csv'))
+survey.dat <- read.csv(here("data",'JAC_Survey_3.31.25.csv'))
 
 # replace column names
 colnames.og <- colnames(survey.dat) 
@@ -73,8 +73,11 @@ NonResidentSurvey.dat <- survey.dat %>%
 Comment.dat <- ResidentSurvey.dat %>%
                   select(Response.ID,Comments)
 
+# Comments
+write.csv(Comment.dat,"Comments_Final_3.31.25.csv")
+
 # drop the comment column in working data frame
-ResidentSurvey.dat <- ResidentSurvey.dat[, -c(3,5:9,123)] 
+ResidentSurvey.dat <- ResidentSurvey.dat[, -c(3,5:9,94)] 
 
 
 ```
@@ -177,6 +180,7 @@ census2020.dat <- read.csv(here("data","JeffCoCensus_Area_2020.csv"))
 
 ```{r}
 # creates figure
+# make axis lables bold and larger; remove 'the' 
 
 # filter out 'other' category temporarily; need to go reclassify as possible
 Q3.dat <- ResidentSurvey.dat[!grepl("^Other \\(Please specify\\)", ResidentSurvey.dat$City.area), ]
@@ -184,50 +188,95 @@ Q3.dat <- ResidentSurvey.dat[!grepl("^Other \\(Please specify\\)", ResidentSurve
 # drop the blank entries
 Q3.dat <- filter(Q3.dat, City.area != "")
 
-# Count the occurrences of each unique 'City.area'
-city_area_counts <- table(Q3.dat$City.area)
+# create a column of total individuals represented by the survey
+Q3.dat$Under7 <- as.numeric(Q3.dat$Under7)
+Q3.dat$`7_12` <- as.numeric(Q3.dat$`7_12`)
+Q3.dat$`13_18`<- as.numeric(Q3.dat$`13_18`)
+Q3.dat$`19_34`<- as.numeric(Q3.dat$`19_34`)
+Q3.dat$`35_54`<- as.numeric(Q3.dat$`35_54`)
+Q3.dat$`55-64`<- as.numeric(Q3.dat$`55-64`)
+Q3.dat$`65_74`<- as.numeric(Q3.dat$`65_74`)
+Q3.dat$`75_older`<- as.numeric(Q3.dat$`75_older`)
 
+#verify these are the correct columns to sum all age categories
+TotalPeople <- rowSums(Q3.dat[7:13],na.rm=TRUE)
+Q3.dat <- data.frame(Q3.dat,TotalPeople)
+
+#rename PT inside city limits row
+Q3.dat <- Q3.dat %>%
+  mutate(City.area = recode(City.area, 
+                            "Port Townsend (outside the city limits)" = "Port Townsend (outside city limits)"))
+
+
+# Count the occurrences of each unique 'City.area' (represents population of respondants only)
 # Convert the table to a data frame for ggplot
-city_area_df <- as.data.frame(city_area_counts)
-colnames(city_area_df) <- c("City.area", "Count")
+city_area_count_resp <- table(Q3.dat$City.area)
+city_area_resp <- as.data.frame(city_area_count_resp)
+colnames(city_area_resp) <- c("City.area", "Count")
+survey_proportion_resp <- round(city_area_resp$Count/sum(city_area_resp$Count),3)
 
-survey_proportion <- round(city_area_df$Count/sum(city_area_df$Count),3)
+# Count the total number of respondants by City.area
+# Calculate as proportion of surveyed population by area
+city_area_total <- Q3.dat %>%
+      select(City.area,TotalPeople) %>%
+      group_by(City.area) %>%
+      summarize(Total = sum(TotalPeople))%>%
+      rename(Count=Total)
+
+survey_proportion_total <- round(city_area_total$Count/sum(city_area_total$Count),3)
 census_proportion <- round(census2020.dat$Count/sum(census2020.dat$Count),3)
-proportion <- c(survey_proportion,census_proportion)
+proportion <- c(survey_proportion_resp,survey_proportion_total,census_proportion)
 
-DataSource <- c(rep("Survey",dim(city_area_df)[1]),rep("Census",dim(census2020.dat)[1]))
-city_area_census <- rbind(city_area_df,census2020.dat)
+DataSource <- c(rep("Survey_Resp",dim(city_area_resp)[1]),rep("Survey_Total",dim(city_area_total)[1]),rep("Census",dim(census2020.dat)[1]))
+
+city_area_census <- rbind(city_area_resp,city_area_total,census2020.dat)
 city_area_census <- cbind(city_area_census,proportion,DataSource)
 
 # Create a bar plot side by side with census data
 plot <- ggplot(city_area_census, aes(x = City.area, y = proportion, fill = DataSource)) +
   geom_bar(stat = "identity", position = "dodge") + 
   scale_fill_viridis(discrete = TRUE) +  # Use a colorblind-friendly palette
-  labs(title = "Population vs Respondants by Area",
+  labs(title = "Population vs Respondents by Area",
        x = "",
-       y = "Percent of Individuals") +
+       y = "Geographic Distribution (%)",
+       legend = "Data Source") +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels
+  theme(axis.text.x = element_text(angle = 45, hjust = 1,size = 12, face = "bold"),
+    plot.title = element_text(size = 20, face = "bold"),
+    axis.title.y = element_text(size = 15, face = "bold"),
+    axis.text.y = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 12, face = "bold"),
+    legend.title = element_text(size = 14, face = "bold"))
 
 print(plot)
 # save figure with fixed dimensions to standardize w/others
-ggsave(here("figures","Census_Survey_Area_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
+ggsave(here("figures","Census_Survey_Area_Fig_AllData.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
 
+city_area_census <- city_area_census %>%
+            filter(DataSource!="Survey_Resp")%>%
+            mutate(DataSource = recode(DataSource,"Survey_Total" = "Survey"))
 
-# Create a bar plot with a colorblind-friendly palette
-plot <- ggplot(city_area_df, aes(x = City.area, y = Count, fill = City.area)) +
-  geom_bar(stat = "identity") +
-  scale_color_viridis(discrete = TRUE) +  # Use a colorblind-friendly palette
-  labs(title = "Number of Records for Each City Area",
-       x = "City/Area",
-       y = "Number of Responses") +
+# Create a bar plot with a colorblind-friendly palette and select only Census and Survey Total Data
+plot <- ggplot(city_area_census, aes(x = City.area, y = proportion, fill = DataSource)) +
+  geom_bar(stat = "identity", position = "dodge") + 
+  scale_fill_viridis(discrete = TRUE) +  
+  labs(title = "Population vs Respondents by Area",
+       x = "",
+       y = "Geographic Distribution (%)",
+       legend = "Data Source") +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels
+  theme(axis.text.x = element_text(angle = 45, hjust = 1,size = 12, face = "bold"),
+    plot.title = element_text(size = 20, face = "bold"),
+    axis.title.y = element_text(size = 15, face = "bold"),
+    axis.text.y = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 12, face = "bold"),
+    legend.title = element_text(size = 14, face = "bold")
+  )  
 
 print(plot)
 
 # save figure with fixed dimensions to standardize w/others
-ggsave(here("figures","city_area_plot.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
+ggsave(here("figures","Census_Survey_Area_Fig_Total.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
 
 
 ```
@@ -239,46 +288,51 @@ ggsave(here("figures","city_area_plot.png"), plot = plot, width = 8, height = 6,
 data <- as.data.frame(city_area_counts)
 colnames(data) <- c("City.area", "Num.responses")
 
+data <- merge(city_area_resp,city_area_total,by="City.area")
+colnames(data) <- c("Area","Survey Respondents","Survey Individuals")
+
+
 # create a table using gt package
 # Create a styled table with the required bold and grey lines
 table_gt <- data %>%
   gt() %>%
-  cols_label(
-    City.area = "City/Area",
-    Num.responses = "Number of Responses"
-  ) %>%
+#  cols_label(
+#    City.area = "City/Area",
+#    Num.responses = "Number of Responses"
+#  ) %>%
   # Left-justify the City/Area column data
   tab_style(
     style = cell_text(align = "left"),
-    locations = cells_body(columns = "City.area")
+    locations = cells_body(columns = "Area")
   ) %>%
   # Left-justify the "City/Area" column name
   tab_style(
     style = cell_text(align = "left"),
-    locations = cells_column_labels(columns = "City.area")
+    locations = cells_column_labels(columns = "Area")
   ) %>%
   # Make column headers bold
   tab_style(
     style = cell_text(weight = "bold"),
-    locations = cells_column_labels(columns = c("City.area", "Num.responses"))
+    locations = cells_column_labels(columns = c("Area", "Survey Respondents","Survey Individuals"))
   ) %>%
   # Bold the line above the column headers (top of the table)
   tab_style(
     style = cell_borders(sides = "top", weight = 2),
-    locations = cells_column_labels(columns = c("City.area", "Num.responses"))
+    locations = cells_column_labels(columns = c("Area", "Survey Respondents","Survey Individuals"))
   ) %>%
   # Bold the line below the column headers (under the header row)
   tab_style(
     style = cell_borders(sides = "bottom", weight = 2),
-    locations = cells_column_labels(columns = c("City.area", "Num.responses"))
+    locations = cells_column_labels(columns = c("Area", "Survey Respondents","Survey Individuals"))
   ) %>%
   # Bold the bottom line of the table (under the last row of data)
   tab_style(
     style = cell_borders(sides = "bottom", weight = 2),
-    locations = cells_body(rows = nrow(city_area_df), columns = c("City.area", "Num.responses"))
+    locations = cells_body(rows = nrow(city_area_df), columns = c("Area", "Survey Respondents","Survey Individuals"))
   ) 
 
 # Save the table as an HTML file first
+print(table_gt)
 gtsave(table_gt, here::here("tables", "City_Area_Table.html"))
 
 # Convert the HTML table to a PNG file
@@ -332,34 +386,40 @@ age_counts <- age_counts %>%
 data <- age_counts %>%
           merge(age_summary, by = "Age")%>%
           #calculate proprtions by category
-          mutate(SurveyProportion = round(Respondents/sum(Respondents),digits = 2))%>%
-          mutate(CensusProportion = round(Census_2020/sum(Census_2020),digits=2))%>%
+          mutate(Survey = round(Respondents/sum(Respondents),digits = 2))%>%
+          mutate(Census = round(Census_2020/sum(Census_2020),digits=2))%>%
           mutate(CensusProportion_2024 = round(OFM.Est_2024/sum(OFM.Est_2024),digits=2))%>%
           #drop 2024 OFM estimates for simplicity?
-          select(Age,Respondents,Census_2020,SurveyProportion,CensusProportion)
+          select(Age,Respondents,Census_2020,Survey,Census)
 
 ```
         
 ```{r}
 # creates figure
-
+library(tidyr)
 # Create a bar plot with a colorblind-friendly palette
 data_long <- data %>%
-  pivot_longer(cols = c(SurveyProportion, CensusProportion),
-               names_to = "ProportionType", 
+  pivot_longer(cols = c(Survey, Census),
+               names_to = "DataSource", 
                values_to = "Proportion")
-
+               
 # Create the plot
-plot <- ggplot(data_long, aes(x = Age, y = Proportion, fill = ProportionType)) +
+plot <- ggplot(data_long, aes(x = Age, y = Proportion, fill = DataSource)) +
   geom_bar(stat = "identity", position = "dodge") +  # Dodge to separate the bars
   scale_fill_viridis(discrete = TRUE) +  # Colorblind-friendly palette
   labs(title = "Survey Responses vs 2020 Census Data by Age Range",
-       x = "Age Range",
-       y = "Proportion",
-       fill = "Proportion Type") +  # Add a legend title for clarity
+       x = "",
+       y = "Age Distribution (%)",
+       fill = "Data Source") +  # Add a legend title for clarity
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels
-
+  theme(axis.text.x = element_text(angle = 45, hjust = 1,size = 12, face = "bold"),
+    plot.title = element_text(size = 20, face = "bold"),
+    axis.title.y = element_text(size = 15, face = "bold"),
+    axis.text.y = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 12, face = "bold"),
+    legend.title = element_text(size = 14, face = "bold")
+    )
+    
 # Print the plot
 print(plot)
 
@@ -423,9 +483,14 @@ webshot(here::here("tables", "Age_Distribution_Data.html"), here::here("tables",
 
 ```
 
+## Add age of individual ages
+## Add total number of people represented by survey
+## To-Do: 
 
 # 5.) how important is it to you to have an aquatic facility?
       # - barplot (percentages) w/table (numbers and percentages)
+      # - re-rank to be from most to least important; if possible add percentage in text
+      # make the text bigger and boldeed
       
 ```{r}
 
@@ -439,20 +504,27 @@ colnames(Pool.Importance) <- c("ImportanceRank","Frequency")
 # Reorder by the frequency (from most to least frequent)
 # Sort by Frequency in descending order and reorder ImportanceRank
 Pool.Importance <- Pool.Importance %>%
-  arrange(desc(Frequency)) %>%
-  mutate(ImportanceRank = factor(ImportanceRank, levels = ImportanceRank))
+  mutate(ImportanceRank = factor(ImportanceRank,levels = c("Very important", "Somewhat important", 
+                                            "Not important", "No opinion/more information needed")))%>%
+                                              arrange(ImportanceRank)
 
 
 # Create the plot
 plot <- ggplot(Pool.Importance, aes(x = ImportanceRank, y = Frequency, fill = "ImportanceRank")) +
   geom_bar(stat = "identity", position = "dodge") +  # Dodge to separate the bars
   scale_fill_viridis(discrete = TRUE) +  # Colorblind-friendly palette
-  labs(title = "Question 5: Ranking Pool Importance",
+  labs(title = "How Important is a New Aquatic Facility?",
        x = "",
        y = "Frequency",
-       fill = "Level of Importance") +  # Add a legend title for clarity
+       fill = "") +  # Add a legend title for clarity
   theme_minimal() +
-  theme(axis.text.x = element_text(size = 12,angle = 45, hjust = 1))  # Rotate x-axis labels
+  theme(axis.text.x = element_text(angle = 45, hjust = 1,size = 12, face = "bold"),
+    plot.title = element_text(size = 20, face = "bold"),
+    axis.title.y = element_text(size = 15, face = "bold"),
+    axis.text.y = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 12, face = "bold"),
+    legend.title = element_text(size = 14, face = "bold")
+    )
 
 # Print the plot
 print(plot)
@@ -542,8 +614,14 @@ AgeAbility.df$SwimmingAbility <- factor(AgeAbility.df$SwimmingAbility,
 plot <- ggplot(AgeAbility.df, aes(x = AgeGroup, y = Proportion, fill = SwimmingAbility)) +
   geom_bar(stat = "identity") +  # use stat = "identity" to plot proportions directly
   scale_fill_viridis(discrete = TRUE) +
-  labs(y = "Proportion", title = "Proportions by Age Group and Swimming Ability") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  labs(x = "",y = "Proportion", title = "Swimming Ability by Age Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1,size = 12, face = "bold"),
+    plot.title = element_text(size = 20, face = "bold"),
+    axis.title.y = element_text(size = 15, face = "bold"),
+    axis.text.y = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 12, face = "bold"),
+    legend.title = element_text(size = 14, face = "bold")
+    )
 
 ggsave(here("figures","Age_Ability_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
 ```
@@ -566,8 +644,8 @@ Q7.df <- Q7.df %>%
       mutate(Percentage = round(100 * Q7.df$Freq / sum(Q7.df$Freq), 1))
 
 # Create the pie chart with percentages
-pie_chart <- ggplot(Q7.df, aes(x = "", y = Percentage, fill = Response)) +
-  geom_bar(stat = "identity", width = 1) +
+plot <- ggplot(Q7.df, aes(x = "", y = Percentage, fill = Response)) +
+   geom_bar(stat = "identity", width = 1, show.legend = TRUE, color = "black") +
   coord_polar(theta = "y") +
   scale_fill_viridis(discrete = TRUE) +
   theme_void() +
@@ -576,14 +654,13 @@ pie_chart <- ggplot(Q7.df, aes(x = "", y = Percentage, fill = Response)) +
     plot.title = element_text(size = 16, face = "bold"),  # Increase title size
     legend.text = element_text(size = 14)  # Increase legend label size
   ) +
-  labs(title = "Has Used a Pool in the Past 2 Yrs") +
+  labs(title = "Pool Usage in the Past 2 Yrs") +
   geom_text(aes(label = paste(Percentage,"%")), 
             position = position_stack(vjust = .5), 
-            color = "darkblue", size = 6, fontface = "bold") 
-  
+            color = "darkblue", size = 4, fontface = "bold") 
 
 # Print the pie chart
-print(pie_chart)
+print(plot)
 
 ggsave(here("figures","Pool_Usage_2yrs.png"), plot = pie_chart, width = 8, height = 6, units = "in", dpi = 300)
 
@@ -597,8 +674,6 @@ ggsave(here("figures","Pool_Usage_2yrs.png"), plot = pie_chart, width = 8, heigh
           - consider clarity of labels, etc.
 
 ```{r}
-
-
 #remove skipped responses
 Q8.dat <- filter(ResidentSurvey.dat,WhichAquaticFacilities != "")
 
@@ -624,7 +699,7 @@ facility_list <- c("Port Angeles SHORE Aquatic Center",
                      "North Kitsap Community Pool",
                      "Olympic Aquatic Center - Bremerton", 
                       "Bainbridge Island", 
-                      "Private/HOA pool (e.g. Port Ludlow)")
+                      "Private/HOA pool (e.g. Port Ludlow")
 
 # Filter the facility_vector based on whether its elements match the desired values
 facilities_clean <- facility_vector[facility_vector %in% facility_list]
@@ -635,6 +710,13 @@ other_facilities <- split_vector[grepl("^Other \\(Please specify\\)", split_vect
 Facilities <- table(facilities_clean)
 Facilities <- as.data.frame(Facilities)
 colnames(Facilities) <- c("AquaticFacility","Frequency")
+
+Facilities <- Facilities %>%
+  mutate(AquaticFacility = recode(AquaticFacility,
+                                  "Port Angeles SHORE Aquatic Center" = "SHORE Aquatic Center",
+                                  "Port Townsend Y/Mountain View Pool" = "Mountain View Pool",
+                                  "Private/HOA pool (e.g. Port Ludlow" = "Private/HOA Pool"))
+
 
 # Reorder by the frequency (from most to least frequently used)
 # Sort by Frequency in descending order and reorder ImportanceRank
@@ -647,25 +729,24 @@ Facilities <- Facilities %>%
 plot <- ggplot(Facilities, aes(x = AquaticFacility, y = Frequency, fill = "AquaticFacility")) +
   geom_bar(stat = "identity", position = "dodge") +  # Dodge to separate the bars
   scale_fill_viridis(discrete = TRUE) +  # Colorblind-friendly palette
-  labs(title = "Question 8: Aquatic Facilities Used",
+  labs(title = "Aquatic Facility Usage",
        x = "",
        y = "Frequency",
        fill = "")+
   theme_minimal() +
-  theme(axis.text.x = element_text(size = 12,angle = 45, hjust = 1))  # Rotate x-axis labels
+ theme(axis.text.x = element_text(angle = 45, hjust = 1,size = 12, face = "bold"),
+    plot.title = element_text(size = 20, face = "bold"),
+    axis.title.y = element_text(size = 15, face = "bold"),
+    axis.text.y = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 12, face = "bold"),
+    legend.title = element_text(size = 14, face = "bold"),
+       plot.margin = margin(10, 10, 10, 20)
+    )+
+  guides(fill = "none")
 
 # Print the plot
 print(plot)
 ggsave(here("figures","AquaticFacilityUse_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
-
-```
-
-# 9.) how often do you use an aquatic facility?
-      # - keep as pie chart w/custom color palette and percentages on chart
-      
-```{r}
-
-
 
 ```
 
@@ -715,8 +796,8 @@ count_data <- count_data %>%
 
 # Order the data by the percentage of "Very likely" votes
 ordered_amenities <- count_data %>%
-  filter(Ranking == "Very likely") %>%
-  arrange(desc(Percentage)) %>%
+  filter(Ranking == "Not likely") %>%
+  arrange(Percentage) %>%
   pull(AquaticAmenity)
 
 # Plot the stacked bar chart
@@ -730,7 +811,13 @@ plot <- ggplot(count_data, aes(x = factor(AquaticAmenity, levels = ordered_ameni
        y = "Percentage (%)",
        fill = "Ranking") +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+   theme(axis.text.x = element_text(angle = 45, hjust = 1,size = 12, face = "bold"),
+    plot.title = element_text(size = 20, face = "bold"),
+    axis.title.y = element_text(size = 15, face = "bold"),
+    axis.text.y = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 12, face = "bold"),
+    legend.title = element_text(size = 14, face = "bold")
+    )
   
 # Print the plot
 print(plot)
@@ -779,8 +866,8 @@ count_data <- count_data %>%
 
 # Order the data by the percentage of "Very likely" votes
 ordered_amenities <- count_data %>%
-  filter(Ranking == "Very likely") %>%
-  arrange(desc(Percentage)) %>%
+  filter(Ranking == "Not likely") %>%
+  arrange(Percentage) %>%
   pull(RecAmenity)
 
 # Plot the stacked bar chart
@@ -794,7 +881,13 @@ plot <- ggplot(count_data, aes(x = factor(RecAmenity, levels = ordered_amenities
        y = "Percentage (%)",
        fill = "Ranking") +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+   theme(axis.text.x = element_text(angle = 45, hjust = 1,size = 12, face = "bold"),
+    plot.title = element_text(size = 20, face = "bold"),
+    axis.title.y = element_text(size = 15, face = "bold"),
+    axis.text.y = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 12, face = "bold"),
+    legend.title = element_text(size = 14, face = "bold")
+    )
   
 # Print the plot
 print(plot)
@@ -824,11 +917,11 @@ long_usage_data <- Usage.dat %>%
   # Reorder the 'Response' categories
   mutate(Response = factor(Response, levels = c("More than once a week", "Several times a month", "Less than once a month", "Never")),
          UsageCategory = recode(UsageCategory, 
-                                "FacilityUsageRate" = "Current Usage Rate",
-                                "AquaAmenities_UsageRate" = "Expected Usage with Aquatic Amenities",
-                                "RecAmenities_UsageRate" = "Expected Usage with Rec Amenities")) %>%
+                                "FacilityUsageRate" = "Current Usage",
+                                "AquaAmenities_UsageRate" = "Expected w/ Aqua Amenities",
+                                "RecAmenities_UsageRate" = "Expected w/ Rec Amenities")) %>%
   # Reorder 'UsageCategory' to ensure it appears as the second factor in the plot
-  mutate(UsageCategory = factor(UsageCategory, levels = c("Current Usage Rate", "Expected Usage with Aquatic Amenities", "Expected Usage with Rec Amenities")))
+  mutate(UsageCategory = factor(UsageCategory, levels = c("Current Usage", "Expected w/ Aqua Amenities", "Expected w/ Rec Amenities")))
 
 # Calculate the percentage for each combination of Response and UsageCategory
 long_usage_data_percent <- long_usage_data %>%
@@ -840,6 +933,7 @@ long_usage_data_percent <- long_usage_data %>%
 # Create plot with current amenities usage rates only
 current_usage <- long_usage_data_percent %>%
                 filter(UsageCategory == "Current Usage Rate")
+                
 
 plot <- ggplot(current_usage, aes(x = Response, y = percentage, fill = UsageCategory)) +
   geom_bar(stat = "identity",position = "dodge") +  # 'dodge' to separate the bars
@@ -848,7 +942,13 @@ plot <- ggplot(current_usage, aes(x = Response, y = percentage, fill = UsageCate
        x = "",
        y = "Percentage (%)") + 
   theme_minimal() +
-  theme(axis.text.x = element_text(size = 12, angle = 45, hjust = 1),legend.position = "none") 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1,size = 12, face = "bold"),
+    plot.title = element_text(size = 20, face = "bold"),
+    axis.title.y = element_text(size = 15, face = "bold"),
+    axis.text.y = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 12, face = "bold"),
+    legend.title = element_text(size = 14, face = "bold")
+    ,legend.position = "none") 
 
  # Print the plot
 print(plot)
@@ -856,7 +956,7 @@ ggsave(here("figures","CurrentUsage_Fig.png"), plot = plot, width = 8, height = 
 
 # Create plot with aquatic amenities usage rates only
 aquatic_usage <- long_usage_data_percent %>%
-                filter(UsageCategory == "Expected Usage with Aquatic Amenities")
+                filter(UsageCategory == "Expected w/ Aqua Amenities")
 
 plot <- ggplot(aquatic_usage, aes(x = Response, y = percentage, fill = UsageCategory)) +
   geom_bar(stat = "identity",position = "dodge") +  # 'dodge' to separate the bars
@@ -865,11 +965,17 @@ plot <- ggplot(aquatic_usage, aes(x = Response, y = percentage, fill = UsageCate
        x = "",
        y = "Percentage (%)") + 
   theme_minimal() +
-  theme(axis.text.x = element_text(size = 12, angle = 45, hjust = 1),legend.position = "none") 
+   theme(axis.text.x = element_text(angle = 45, hjust = 1,size = 12, face = "bold"),
+    plot.title = element_text(size = 20, face = "bold"),
+    axis.title.y = element_text(size = 15, face = "bold"),
+    axis.text.y = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 12, face = "bold"),
+    legend.title = element_text(size = 14, face = "bold")
+    ,legend.position = "none") 
 
  # Print the plot
 print(plot)
-ggsave(here("figures","AquaticUsage_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300) 
+ggsave(here("figures","AquaticUsageChange_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300) 
 
 # Create plot with recreation amenities usage rates only
 rec_usage <- long_usage_data_percent %>%
@@ -882,7 +988,13 @@ plot <- ggplot(rec_usage, aes(x = Response, y = percentage, fill = UsageCategory
        x = "",
        y = "Percentage (%)") + 
   theme_minimal() +
-  theme(axis.text.x = element_text(size = 12, angle = 45, hjust = 1),legend.position = "none") 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1,size = 12, face = "bold"),
+    plot.title = element_text(size = 20, face = "bold"),
+    axis.title.y = element_text(size = 15, face = "bold"),
+    axis.text.y = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 12, face = "bold"),
+    legend.title = element_text(size = 14, face = "bold")
+    ,legend.position = "none") 
 
  # Print the plot
 print(plot)
@@ -890,6 +1002,9 @@ ggsave(here("figures","RecreationUsage_Fig.png"), plot = plot, width = 8, height
     
 
 # Create plot with percentages on the y-axis and side-by-side comparison bars
+# remove Rec Amenities from figure
+long_usage_data_percent <- filter(long_usage_data_percent,UsageCategory!="Expected w/ Rec Amenities")
+
 plot <- ggplot(long_usage_data_percent, aes(x = Response, y = percentage, fill = UsageCategory)) +
   geom_bar(stat = "identity", position = "dodge") +  # 'dodge' to separate the bars
   scale_fill_viridis(discrete = TRUE) +  # Colorblind-friendly palette
@@ -898,7 +1013,13 @@ plot <- ggplot(long_usage_data_percent, aes(x = Response, y = percentage, fill =
        y = "Percentage (%)",
        fill = "Usage Categories") +  # Add a legend title for clarity
   theme_minimal() +
-  theme(axis.text.x = element_text(size = 12, angle = 45, hjust = 1))  # Rotate x-axis labels
+  theme(axis.text.x = element_text(angle = 45, hjust = 1,size = 12, face = "bold"),
+    plot.title = element_text(size = 20, face = "bold"),
+    axis.title.y = element_text(size = 15, face = "bold"),
+    axis.text.y = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 12, face = "bold"),
+    legend.title = element_text(size = 14, face = "bold")
+  ) 
 
  # Print the plot
 print(plot)
@@ -909,9 +1030,9 @@ ggsave(here("figures","UsageRateComparison_Fig.png"), plot = plot, width = 8, he
 #Now plot the percent change
 usage_change_data <- long_usage_data_percent %>%
   select("Response","UsageCategory", "percentage")%>%
-  filter(UsageCategory %in% c("Current Usage Rate", "Expected Usage with Aquatic Amenities")) %>%
+  filter(UsageCategory %in% c("Current Usage", "Expected w/ Aqua Amenities")) %>%
   pivot_wider(names_from = UsageCategory, values_from = percentage) %>%
-  mutate(percent_change = `Expected Usage with Aquatic Amenities` - `Current Usage Rate`) %>%
+  mutate(percent_change = `Expected w/ Aqua Amenities` - `Current Usage`) %>%
   select(Response, percent_change)
 
 
@@ -919,20 +1040,24 @@ plot <-  usage_change_data %>%
   ggplot(aes(x = Response, y = percent_change, fill = percent_change > 0)) +  
   geom_bar(stat = "identity", show.legend = TRUE) +
   labs(title = "Usage Rate Change with Aquatic Amenities",
-       x = "Response Category",
+       x = "",
        y = "Percent Change (%)",
        fill = "Change Direction") +  
   scale_fill_viridis(discrete = TRUE, direction = 1, 
                      labels = c("Negative", "Positive")) +  
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(axis.text.x = element_text(angle = 45, hjust = 1,size = 12, face = "bold"),
+    plot.title = element_text(size = 20, face = "bold"),
+    axis.title.y = element_text(size = 15, face = "bold"),
+    axis.text.y = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 12, face = "bold"),
+    legend.title = element_text(size = 14, face = "bold")
+  ) 
 
 # Print the plot
 print(plot)
 ggsave(here("figures","UsageRatePercentChange_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300) 
    
-  
-  
 ```
 
 # 13.) non-aquatic amenities
@@ -969,23 +1094,14 @@ library(dplyr)
 # Filter the data to remove unwanted responses (empty strings and non-voters)
 cleaned_data <- tax.dat %>%
   filter(TaxSupport %in% c("Yes", "No", "I don't know/need more information")) %>%
-  filter(TaxSupport != "" & TaxSupport != "I am not a Jefferson County voter")
-
+  filter(TaxSupport != "" & TaxSupport != "I am not a Jefferson County voter") %>%
+  mutate(TaxSupport = ifelse(TaxSupport=="I don't know/need more information","Need more info",TaxSupport))
+  
 # Calculate the percentage of each response in the TaxSupport column
 tax_support_counts <- cleaned_data %>%
   count(TaxSupport) %>%
   mutate(percentage = n / sum(n) * 100)
 
-
-# Filter the data to remove unwanted responses (empty strings and non-voters)
-cleaned_data <- tax.dat %>%
-  filter(TaxSupport %in% c("Yes", "No", "I don't know/need more information")) %>%
-  filter(TaxSupport != "" & TaxSupport != "I am not a Jefferson County voter")
-
-# Calculate the percentage of each response in the TaxSupport column
-tax_support_counts <- cleaned_data %>%
-  count(TaxSupport) %>%
-  mutate(percentage = n / sum(n) * 100)
 
 # Plot the pie chart with percentages as text and white outlines
 plot <- ggplot(tax_support_counts, aes(x = "", y = percentage, fill = TaxSupport)) +
@@ -994,10 +1110,13 @@ plot <- ggplot(tax_support_counts, aes(x = "", y = percentage, fill = TaxSupport
   scale_fill_viridis(discrete = TRUE) +  # Use viridis color palette
   labs(title = "Distribution of Tax Support Responses") +  # Title for the pie chart
   theme_void() +  # Remove background gridlines and axis
-  theme(plot.title = element_text(hjust = 0.5)) +  # Center the title
+  theme(plot.title = element_text(hjust = 0.5,size=14,face ="bold"),
+    legend.text = element_text(size = 10, face = "bold"),
+    legend.title = element_text(size = 12, face = "bold")
+  )  +  # Center the title
   geom_text(aes(label = paste0(round(percentage, 1), "%")), 
             position = position_stack(vjust = 0.5),  
-            color = "light blue", size = 4,fontface="bold")  # Set text color and size
+            color = "dark blue", size = 4,fontface="bold")  # Set text color and size
 
 ggsave(here("figures","TaxSupport_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300) 
 
@@ -1037,7 +1156,14 @@ ordered_data <- c(ordered_data,"West End")
        y = "Percentage of Responses",
        fill = "Tax Support") +  # Label the legend
   theme_minimal() +  # Use a minimal theme
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+ theme(axis.text.x = element_text(angle = 45, hjust = 1,size = 12, face = "bold"),
+    plot.title = element_text(size = 20, face = "bold"),
+    axis.title.y = element_text(size = 15, face = "bold"),
+    axis.text.y = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 12, face = "bold"),
+    legend.title = element_text(size = 14, face = "bold"),
+       plot.margin = margin(10, 10, 10, 60)
+  ) +
  geom_hline(yintercept = 50, linetype = "dashed", color = "grey", size = 1) 
 
 # Print the plot
