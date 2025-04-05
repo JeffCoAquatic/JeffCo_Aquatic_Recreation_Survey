@@ -551,7 +551,9 @@ colnames(Pool.Importance) <- c("ImportanceRank","Frequency")
 Pool.Importance <- Pool.Importance %>%
   mutate(ImportanceRank = factor(ImportanceRank,levels = c("Very important", "Somewhat important", 
                                             "Not important", "No opinion/more information needed")))%>%
-                                              arrange(ImportanceRank)
+                                              arrange(ImportanceRank)%>%
+                                              mutate(Percentage = Frequency/sum(Frequency))
+                                              
 
 
 # Create the plot
@@ -947,40 +949,28 @@ ggsave(here("figures","RecAmenities_Fig.png"), plot = plot, width = 8, height = 
 
 
 ```{r}
-Usage.dat <- ResidentSurvey.dat %>%
-              select(FacilityUsageRate,
-              AquaAmenities_UsageRate,
-              RecAmenities_UsageRate)
+CurrentUsage.dat <- as.data.frame(table(ResidentSurvey.dat$FacilityUsageRate))
+CurrentUsage.dat <- CurrentUsage.dat[2:5,]
+Percentage <- CurrentUsage.dat$Freq/sum(CurrentUsage.dat$Freq)
+CurrentUsage.dat <- data.frame(CurrentUsage.dat,Percentage,rep("Current",dim(CurrentUsage.dat)[1]))
+colnames(CurrentUsage.dat) <- c("Usage_Rate","Frequency","Percentage","Usage Rate")
+  
+AquaticUsage.dat <- as.data.frame(table(ResidentSurvey.dat$AquaAmenities_UsageRate))
+AquaticUsage.dat <- AquaticUsage.dat[2:5,]
+Percentage <- AquaticUsage.dat$Freq/sum(AquaticUsage.dat$Freq)
+AquaticUsage.dat <- data.frame(AquaticUsage.dat,Percentage,rep("Aquatic",dim(AquaticUsage.dat)[1]))
+colnames(AquaticUsage.dat) <- c("Usage_Rate","Frequency","Percentage","Usage Rate")
 
-# Transform the data
-long_usage_data <- Usage.dat %>%
-  pivot_longer(cols = c("FacilityUsageRate", "AquaAmenities_UsageRate", "RecAmenities_UsageRate"), 
-               names_to = "UsageCategory", 
-               values_to = "Response") %>%
-  mutate(Response = recode(Response, "Don't use an aquatic facility" = "Never")) %>%
-  filter(Response != "")%>%
-  # Reorder the 'Response' categories
-  mutate(Response = factor(Response, levels = c("More than once a week", "Several times a month", "Less than once a month", "Never")),
-         UsageCategory = recode(UsageCategory, 
-                                "FacilityUsageRate" = "Current Usage",
-                                "AquaAmenities_UsageRate" = "Expected w/ Aqua Amenities",
-                                "RecAmenities_UsageRate" = "Expected w/ Rec Amenities")) %>%
-  # Reorder 'UsageCategory' to ensure it appears as the second factor in the plot
-  mutate(UsageCategory = factor(UsageCategory, levels = c("Current Usage", "Expected w/ Aqua Amenities", "Expected w/ Rec Amenities")))
+RecUsage.dat <- as.data.frame(table(ResidentSurvey.dat$RecAmenities_UsageRate))
+RecUsage.dat <- RecUsage.dat[2:5,]
+Percentage <- RecUsage.dat$Freq/sum(RecUsage.dat$Freq)
+RecUsage.dat <- data.frame(RecUsage.dat,Percentage,rep("Recreation",dim(RecUsage.dat)[1]))
+colnames(RecUsage.dat) <- c("Usage_Rate","Frequency","Percentage","Usage Rate")
 
-# Calculate the percentage for each combination of Response and UsageCategory
-long_usage_data_percent <- long_usage_data %>%
-  count(Response, UsageCategory) %>%  # Count occurrences of each combination
-  group_by(Response) %>%
-  mutate(percentage = n / sum(n) * 100) %>%  # Calculate percentage
-  ungroup()  # Remove the grouping after calculation
+UsageCombined.dat <- rbind(CurrentUsage.dat,AquaticUsage.dat,RecUsage.dat)
 
-# Create plot with current amenities usage rates only
-current_usage <- long_usage_data_percent %>%
-                filter(UsageCategory == "Current Usage Rate")
-                
 
-plot <- ggplot(current_usage, aes(x = Response, y = percentage, fill = UsageCategory)) +
+plot <- ggplot(UsageCombined.dat, aes(x = Response, y = percentage, fill = UsageCategory)) +
   geom_bar(stat = "identity",position = "dodge") +  # 'dodge' to separate the bars
   scale_fill_viridis(discrete = TRUE,direction = 1) +  # Colorblind-friendly palette
   labs(title = "Current Facility Usage Rates",
