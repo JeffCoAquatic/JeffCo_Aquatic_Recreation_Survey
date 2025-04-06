@@ -528,10 +528,6 @@ webshot(here::here("tables", "Age_Distribution_Data.html"), here::here("tables",
 
 ```
 
-## Add age of individual ages
-## Add total number of people represented by survey
-## To-Do: 
-
 # 5.) how important is it to you to have an aquatic facility?
       # - barplot (percentages) w/table (numbers and percentages)
       # - re-rank to be from most to least important; if possible add percentage in text
@@ -709,7 +705,7 @@ plot <- ggplot(Q7.df, aes(x = "", y = Percentage, fill = Response)) +
 # Print the pie chart
 print(plot)
 
-ggsave(here("figures","Pool_Usage_2yrs.png"), plot = pie_chart, width = 8, height = 6, units = "in", dpi = 300)
+ggsave(here("figures","Pool_Usage_2yrs.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
 
 ```
 
@@ -944,33 +940,40 @@ ggsave(here("figures","RecAmenities_Fig.png"), plot = plot, width = 8, height = 
 ```
 
 # 12.) How much more would you use an aquatic facility, if amenities?
-      # include pie chart 
-      # also include chart with comparison to current useage (bar chart with two colors to show before and after)
-
+- also includes Q9 and usage for a recreation facility
+    
 
 ```{r}
 CurrentUsage.dat <- as.data.frame(table(ResidentSurvey.dat$FacilityUsageRate))
 CurrentUsage.dat <- CurrentUsage.dat[2:5,]
 Percentage <- CurrentUsage.dat$Freq/sum(CurrentUsage.dat$Freq)
 CurrentUsage.dat <- data.frame(CurrentUsage.dat,Percentage,rep("Current",dim(CurrentUsage.dat)[1]))
-colnames(CurrentUsage.dat) <- c("Usage_Rate","Frequency","Percentage","Usage Rate")
+colnames(CurrentUsage.dat) <- c("Response","Frequency","Percentage","UsageCategory")
+CurrentUsage.dat <-  CurrentUsage.dat %>%
+  mutate(Response = recode(Response, "Don't use an aquatic facility" = "Never"))
   
 AquaticUsage.dat <- as.data.frame(table(ResidentSurvey.dat$AquaAmenities_UsageRate))
 AquaticUsage.dat <- AquaticUsage.dat[2:5,]
 Percentage <- AquaticUsage.dat$Freq/sum(AquaticUsage.dat$Freq)
-AquaticUsage.dat <- data.frame(AquaticUsage.dat,Percentage,rep("Aquatic",dim(AquaticUsage.dat)[1]))
-colnames(AquaticUsage.dat) <- c("Usage_Rate","Frequency","Percentage","Usage Rate")
-
+AquaticUsage.dat <- data.frame(AquaticUsage.dat,Percentage,rep("Expected w/Aquatic",dim(AquaticUsage.dat)[1]))
+colnames(AquaticUsage.dat) <- c("Response","Frequency","Percentage","UsageCategory")
+ 
 RecUsage.dat <- as.data.frame(table(ResidentSurvey.dat$RecAmenities_UsageRate))
 RecUsage.dat <- RecUsage.dat[2:5,]
 Percentage <- RecUsage.dat$Freq/sum(RecUsage.dat$Freq)
-RecUsage.dat <- data.frame(RecUsage.dat,Percentage,rep("Recreation",dim(RecUsage.dat)[1]))
-colnames(RecUsage.dat) <- c("Usage_Rate","Frequency","Percentage","Usage Rate")
+RecUsage.dat <- data.frame(RecUsage.dat,Percentage,rep("Expected w/Recreation",dim(RecUsage.dat)[1]))
+colnames(RecUsage.dat) <- c("Response","Frequency","Percentage","UsageCategory")
 
 UsageCombined.dat <- rbind(CurrentUsage.dat,AquaticUsage.dat,RecUsage.dat)
+# reorder the usage rates from most to least use
+UsageCombined.dat$Response <- factor(UsageCombined.dat$Response, 
+                                  levels = c("More than once a week", 
+                                          "Several times a month", 
+                                           "Less than once a month", 
+                                            "Never"))
 
 
-plot <- ggplot(UsageCombined.dat, aes(x = Response, y = percentage, fill = UsageCategory)) +
+plot <- ggplot(UsageCombined.dat, aes(x = Response, y = Percentage, fill = UsageCategory)) +
   geom_bar(stat = "identity",position = "dodge") +  # 'dodge' to separate the bars
   scale_fill_viridis(discrete = TRUE,direction = 1) +  # Colorblind-friendly palette
   labs(title = "Current Facility Usage Rates",
@@ -982,18 +985,41 @@ plot <- ggplot(UsageCombined.dat, aes(x = Response, y = percentage, fill = Usage
     axis.title.y = element_text(size = 15, face = "bold"),
     axis.text.y = element_text(size = 12, face = "bold"),
     legend.text = element_text(size = 12, face = "bold"),
+    legend.title = element_text(size = 14, face = "bold"))
+   # ,legend.position = "none") 
+
+ # Print the plot
+print(plot)
+ggsave(here("figures","AllUsage_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300) 
+
+# Create plot with current usage rates only
+current_usage <- UsageCombined.dat %>%
+                filter(UsageCategory == "Current")
+
+plot <- ggplot(current_usage, aes(x = Response, y = Percentage, fill = UsageCategory)) +
+  geom_bar(stat = "identity",position = "dodge") +  # 'dodge' to separate the bars
+  scale_fill_viridis(discrete = TRUE,direction = 1) +  # Colorblind-friendly palette
+  labs(title = "Current Aquatic Facility Usage",
+       x = "",
+       y = "Percentage (%)") + 
+  theme_minimal() +
+   theme(axis.text.x = element_text(angle = 45, hjust = 1,size = 12, face = "bold"),
+    plot.title = element_text(size = 20, face = "bold"),
+    axis.title.y = element_text(size = 15, face = "bold"),
+    axis.text.y = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 12, face = "bold"),
     legend.title = element_text(size = 14, face = "bold")
     ,legend.position = "none") 
 
  # Print the plot
 print(plot)
-ggsave(here("figures","CurrentUsage_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300) 
+ggsave(here("figures","CurrentAquaticUsage_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300) 
 
 # Create plot with aquatic amenities usage rates only
-aquatic_usage <- long_usage_data_percent %>%
-                filter(UsageCategory == "Expected w/ Aqua Amenities")
+aquatic_usage <- UsageCombined.dat %>%
+                filter(UsageCategory == "Expected w/Aquatic")
 
-plot <- ggplot(aquatic_usage, aes(x = Response, y = percentage, fill = UsageCategory)) +
+plot <- ggplot(aquatic_usage, aes(x = Response, y = Percentage, fill = UsageCategory)) +
   geom_bar(stat = "identity",position = "dodge") +  # 'dodge' to separate the bars
   scale_fill_viridis(discrete = TRUE,direction = 1) +  # Colorblind-friendly palette
   labs(title = "Expected Usage with Aquatic Amenities",
@@ -1013,10 +1039,10 @@ print(plot)
 ggsave(here("figures","AquaticUsageChange_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300) 
 
 # Create plot with recreation amenities usage rates only
-rec_usage <- long_usage_data_percent %>%
-                filter(UsageCategory == "Expected Usage with Rec Amenities")
+rec_usage <- UsageCombined.dat %>%
+                filter(UsageCategory == "Expected w/Recreation")
 
-plot <- ggplot(rec_usage, aes(x = Response, y = percentage, fill = UsageCategory)) +
+plot <- ggplot(rec_usage, aes(x = Response, y = Percentage, fill = UsageCategory)) +
   geom_bar(stat = "identity",position = "dodge") +  # 'dodge' to separate the bars
   scale_fill_viridis(discrete = TRUE,direction = 1) +  # Colorblind-friendly palette
   labs(title = "Expected Usage with Recreation Amenities",
@@ -1038,9 +1064,9 @@ ggsave(here("figures","RecreationUsage_Fig.png"), plot = plot, width = 8, height
 
 # Create plot with percentages on the y-axis and side-by-side comparison bars
 # remove Rec Amenities from figure
-long_usage_data_percent <- filter(long_usage_data_percent,UsageCategory!="Expected w/ Rec Amenities")
+aquatic_current <- filter(UsageCombined.dat,UsageCategory!="Expected w/Recreation")
 
-plot <- ggplot(long_usage_data_percent, aes(x = Response, y = percentage, fill = UsageCategory)) +
+plot <- ggplot(aquatic_current, aes(x = Response, y = Percentage, fill = UsageCategory)) +
   geom_bar(stat = "identity", position = "dodge") +  # 'dodge' to separate the bars
   scale_fill_viridis(discrete = TRUE) +  # Colorblind-friendly palette
   labs(title = "Usage Rate Comparison",
@@ -1120,11 +1146,6 @@ cleaned_data <- tax.dat %>%
 tax_support_counts <- cleaned_data %>%
   count(TaxSupport) %>%
   mutate(percentage = n / sum(n) * 100)
-
-# Plot the pie chart
-# Load necessary libraries
-library(ggplot2)
-library(dplyr)
 
 # Filter the data to remove unwanted responses (empty strings and non-voters)
 cleaned_data <- tax.dat %>%
