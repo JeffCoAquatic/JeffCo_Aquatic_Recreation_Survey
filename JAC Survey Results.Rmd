@@ -2,7 +2,9 @@
 title: "Aquatic Survey Results"
 author: "K. Meyer, K. Bosley"
 date: "`r Sys.Date()`"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -30,56 +32,10 @@ library(viridis)
 library(webshot)
 ```
 
-## Load and filter data for analysis
+## Load QAQC'd data
 
 ```{r}
-survey.dat <- read.csv(here("data",'JAC_Survey_3.31.25.csv'))
-
-# replace column names
-colnames.og <- colnames(survey.dat) 
-colnames.new <- c("Response.ID","IP.address","User.agent","Response.status","Survey.URL","Start.time","Completion.time","Time.taken",
-                          "Collector","JeffCo.resident","City.area","Age","Under7","7_12","13_18","19_34","35_54","55-64","65_74","75_older","RateNewPoolImportance",
-                          "Under7_Non.swimmer","Under7_Beginner","Under7_Intermediate","Under7_Advanced",
-                          "7_12_Non.swimmer","7_12_Beginner","7_12_Intermediate","7_12_Advanced",
-                          "13_18_Non.swimmer","13_18_Beginner","13_18_Intermediate","13_18_Advanced",
-                          "19_34_Non.swimmer","19_34_Beginner","19_34_Intermediate","19_34_Advanced",
-                          "35_54_Non.swimmer","35_54_Beginner","35_54_Intermediate","35_54_Advanced",
-                          "55-64_Non.swimmer","55-64_Beginner","55-64_Intermediate","55-64_Advanced",
-                          "65_74_Non.swimmer","65_74_Beginner","65_74_Intermediate","65_74_Advanced",
-                          "75_older_Non.swimmer","75_older_Beginner","75_older_Intermediate","75_older_Advanced","UsedAquaticsPast2Years",
-                          "WhichAquaticFacilities","FacilityUsageRate","AquaAmenities_LapSwimming","AquaAmenities_OpenSwim","AquaAmenities_YouthLessons",
-                          "AquaAmenities_AdultLessons","AquaAmenities_CompetitiveSwim","AquaAmenities_LifeguardTrain","AquaAmenities_Aerobics",
-                          "AquaAmenities_SyncroSwim","AquaAmenities_SportsLeagues","AquaAmenities_SafetyTrain","AquaAmenities_Therapeutic",
-                          "AquaAmenities_PartyRental","AquaAmenities_ParentChild","AquaAmenities_Sauna","AquaAmenities_HotTub","AquaAmenities_PublicShower",
-                          "AquaAmenities_OutdoorPool","AquaAmenities_SplashPark","AquaAmenities_UsageRate","RecAmenities_AfterschoolCamps",
-                          "RecAmenities_Preschool","RecAmenities_Childcare","RecAmenities_Playgroups","RecAmenities_FitnessClass","RecAmenities_PhysTherapy",
-                          "RecAmenities_EventSpace","RecAmenities_WellnessClass","RecAmenities_Kitchen","RecAmenities_Cafe","RecAmenities_Gym",
-                          "RecAmenities_OutPickleball","RecAmenities_InPickleball","RecAmenities_RockClimb","RecAmenities_TeenFit","RecAmenities_TeenCenter",
-                          "RecAmenities_UsageRate","TaxSupport","Comments")
-
-### Set Column Names and Remove Non-resident/tourist surveys
-ResidentSurvey.dat <- survey.dat %>%
-                        {cbind(.[, 1:93], .[, 123])} %>%
-                        filter(Do.you.live.in.Jefferson.County.!="No, I am visiting")%>%
-                        setNames(colnames.new)
-
-# create nonresident survey data frame for future analysis
-NonResidentSurvey.dat <- survey.dat %>%
-                        {cbind(.[, 1:93], .[, 123])} %>%
-                        filter(Do.you.live.in.Jefferson.County.=="No, I am visiting")%>%
-                        setNames(colnames.new)
-
-# save comments and survey ID as separate data frame for later
-Comment.dat <- ResidentSurvey.dat %>%
-                  select(Response.ID,Comments)
-
-# Comments
-write.csv(Comment.dat,"Comments_Final_3.31.25.csv")
-
-# drop the comment column in working data frame
-ResidentSurvey.dat <- ResidentSurvey.dat[, -c(3,5:9,94)] 
-
-
+source('DataQAQC.R')
 ```
 
 # 1.) Summary of responses/what's presented: Include table w/residency status. Total # submissions (include completes and partials), removed non-resident/visitor (include #) surveys for this purpose 
@@ -94,9 +50,7 @@ colnames(Total.responses) <- c("Survey Status","Resident","Non-resident")
 data <- Total.responses
 num.rows <- dim(data)[1]
 
-
-# create a table using gt package
-# Create a styled table with the required bold and grey lines
+# Create a summary table of total responses
 table_gt <- data %>%
   gt() %>%
   # Left-justify the first/row label column data
@@ -138,6 +92,7 @@ gtsave(table_gt, here::here("tables","SurveyStatusTable.rtf"))
 
 ```{r}
 
+# create a table of IP addresses used in survey
 ip_freq <- table(ResidentSurvey.dat$IP.address)
 
 # Convert the frequency table to a data frame
@@ -184,6 +139,9 @@ census2020.dat <- read.csv(here("data","JeffCoCensus_Area_2020.csv"))
 
 # filter out 'other' category temporarily; need to go reclassify as possible
 Q3.dat <- ResidentSurvey.dat[!grepl("^Other \\(Please specify\\)", ResidentSurvey.dat$City.area), ]
+
+# filter out 'other' category temporarily; need to go reclassify as possible
+PRR_dat_cityarea <- ResidentSurvey.dat[grepl("^Other \\(Please specify\\)", ResidentSurvey.dat$City.area), ]
 
 # drop the blank entries
 Q3.dat <- filter(Q3.dat, City.area != "")
@@ -418,7 +376,7 @@ age_summary <- data.frame(
 # summarise and format age distribution data
 
 # drop the blank entries
-ResidentSurvey.dat <- filter(ResidentSurvey.dat, Age != "")
+Age.dat <- filter(ResidentSurvey.dat, Age != "")
 
 # Count the occurrences of each unique 'City.area'
 age_counts <- as.data.frame(table(ResidentSurvey.dat$Age))
@@ -747,8 +705,9 @@ facility_list <- c("Port Angeles SHORE Aquatic Center",
 # Filter the facility_vector based on whether its elements match the desired values
 facilities_clean <- facility_vector[facility_vector %in% facility_list]
                   
-other_facilities <- split_vector[grepl("^Other \\(Please specify\\)", split_vector) ]
-
+other_facilities <- ResidentSurvey.dat[
+  grepl("^Other \\(Please specify\\)", ResidentSurvey.dat$WhichAquaticFacilities),
+]
 
 Facilities <- table(facilities_clean)
 Facilities <- as.data.frame(Facilities)
