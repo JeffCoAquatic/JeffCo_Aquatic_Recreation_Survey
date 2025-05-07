@@ -327,5 +327,6 @@ ResidentSurvey.dat <- ResidentSurvey.dat %>%
   mutate(City.area = ifelse(!is.na(city.area.revised), city.area.revised, City.area)) %>%
   select(-city.area.revised)  # Remove the helper column if no longer needed
 
+write.csv(ResidentSurvey.dat,file="JAC_Survey_3.31.25_CLEAN.csv")
 
 
