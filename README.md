@@ -10,7 +10,9 @@ Data and files contained in this repository include the following:
 + file with submitted comments and catagorizations used for the sentiment analysis (*CommentScoringSheet_share.xlsx*)
 + QA/QC code that filters data for resident responses, corrects formatting issues with, and recategorizes the 'other' entries as appropriate (*DataQAQC.R*)
 + Master R Markdown script that summarizes and produces outputs for each survey question (*JAC Survey Results.Rmd*)
++ Several output files, tables and figures from the processing code.
 + Power Point Presentation of the preliminary analysis presented to the BOCC on April, 7th 2025 (*BOCC Survey Presentation_April 7.pdf*)
-+ Several output files, tables and figures from the processing code. 
++ Qualitive analysis of comments provided by survey respondents (Qualitative Comment Summary_complete.pdf)
+  
   
   
