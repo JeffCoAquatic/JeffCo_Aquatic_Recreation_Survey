@@ -13,7 +13,7 @@ Data and files contained in this repository include the following:
 + Master R Markdown script that summarizes and produces outputs for each survey question (*JAC Survey Results.Rmd*)
 + Several output files, tables and figures from the processing code.
 + Power Point Presentation of the preliminary analysis presented to the BOCC on April, 7th 2025 (*BOCC Survey Presentation_April 7.pdf*)
-+ Qualitive analysis of comments provided by survey respondents (Qualitative Comment Summary_complete.pdf)
++ Qualitive analysis of comments provided by survey respondents (*Qualitative Comment Summary_complete.pdf*)
   
   
   
