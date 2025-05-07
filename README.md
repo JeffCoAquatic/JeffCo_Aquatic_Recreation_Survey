@@ -6,13 +6,14 @@ An initial preliminary analysis was conducted to prepare the data for the Board 
 
 Data and files contained in this repository include the following:
 + raw dataset with all responses (some fields removed for privacy; *Data/JAC_Survey_3.31.25.csv*)
++ cleaned and formated dataset output after all the QA/QC proceedures are applied (*JAC_Survey_3.31.25_cleaned.csv*)
 + Jefferson County population breakdown by age provided by Jefferson County from the 2020 census (*AquaticsSurveyAgeGroup_AllData.csv*)
 + file with submitted comments and catagorizations used for the sentiment analysis (*CommentScoringSheet_share.xlsx*)
 + QA/QC code that filters data for resident responses, corrects formatting issues with, and recategorizes the 'other' entries as appropriate (*DataQAQC.R*)
 + Master R Markdown script that summarizes and produces outputs for each survey question (*JAC Survey Results.Rmd*)
 + Several output files, tables and figures from the processing code.
 + Power Point Presentation of the preliminary analysis presented to the BOCC on April, 7th 2025 (*BOCC Survey Presentation_April 7.pdf*)
-+ Qualitive analysis of comments provided by survey respondents (Qualitative Comment Summary_complete.pdf)
++ Qualitive analysis of comments provided by survey respondents (*Qualitative Comment Summary_complete.pdf*)
   
   
   
