@@ -40,7 +40,7 @@ colnames.new <- c("Response.ID","IP.address","User.agent","Response.status","Sur
                   "RecAmenities_UsageRate","TaxSupport","Comments")
 
 # create character vector of clearer column names for the resident survey questions (cols 94:122 (data) and 123(comments))
-colnames.nonres <- c("JeffCo_Visit_Freq","Visit_Season","Visit_Length","Visit_Reason","AquaAmenities_LapSwimming",
+colnames.nonres <- c("Response.status","JeffCo_Visit_Freq","Visit_Season","Visit_Length","Visit_Reason","AquaAmenities_LapSwimming",
                      "AquaAmenities_SwimLessons","AquaAmenities_OpenSwim","AquaAmenities_Aerobics","AquaAmenities_SwimMeets",
                      "AquaAmenities_SafetyTrain","AquaAmenities_Therapeutic","AquaAmenities_ParentChild","AquaAmenities_Sauna",
                      "AquaAmenities_HotTub","AquaAmenities_PublicShower","AquaAmenities_OutdoorPool","AquaAmenities_SplashPark",
@@ -86,7 +86,8 @@ ResidentSurvey.dat <- survey.dat %>%
 #partial <- filter(ResidentSurvey.dat,Response.status=="PARTIAL")
 #write.csv(partial,file = "Partial.Responses.csv")
 
-# Remove partial survey entries where there was NO information beyond demographic categories
+# Remove partial survey entries where there was NO information beyond demographic categories (~56% of partial entries)
+# Partial survey entries with any information past demographics were retained
 remove_ids <- c("wrB669Dd", "LjCYPvXx", "W3CKRi57", "M0CYtV3I", "lkfOSlMH",
                 "VCCK50rS", "elfRxUYm", "nEk07L6j", "bKC4wpxG", "bdDTfvrM",
                 "TgB6u4vs", "u0kqJRIf", "LDCYkW96", "u6fE6EZh", "hyCYb8Ul",
@@ -110,7 +111,7 @@ ResidentSurvey.dat <- ResidentSurvey.dat %>%
 #
 NonResidentSurvey.dat <- survey.dat %>%
   filter(Do.you.live.in.Jefferson.County.=="No, I am visiting")%>%
-  select(94:123) %>%
+  select(4,94:123) %>%
   setNames(colnames.nonres)
 
 # write csv file that represents the FULL, unaltered dataset (aside from column renaming)
@@ -298,24 +299,10 @@ table(ResidentSurvey.dat$Age75_older)
 # write a script that removes partial responses without info beyond required demographic information
 # Find the column index of "Age"
 age_col_index <- which(names(partial) == "Age")
+### Replace locations reported in the 'Other' category with the area categories when possible
+### Remove locations outside of county
 
-# Get all columns after Age
-after_age_cols <- names(partial)[(age_col_index + 1):ncol(partial)]
-
-# Remove rows where all columns after Age are NA or blank ("")
-partial_cleaned <- partial %>%
-  filter(if_any(all_of(after_age_cols), ~ !is.na(.) & . != ""))
-
-##### ultimately removed 44 partial responses which did not contain any information beyond basic demographic information (and many lacked that as well)
-
-## rejoin with completed resident suervey data
-
-completed <- filter(ResidentSurvey.dat,Response.status=="COMPLETED")
-Resident.clean <- rbind(completed,partial_cleaned)
-
-### load the spreadsheet from Katelyn and replace changes to locations, remove flagged locations, and keep certain ones blank
-
-# Read in your CSV with the mapping
+# Read in your CSV with corrected locations/area categories
 recode_area <- read.csv("OtherArea_reponses.csv")
 
 # Left join to add the revised city name to your main dataset

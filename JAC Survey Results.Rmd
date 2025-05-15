@@ -24,6 +24,7 @@ knitr::opts_chunk$set(echo = FALSE)
 
 ```{r}
 # load libraries
+library(tidyr)
 library(dplyr)
 library(gt)
 library(ggplot2)
@@ -123,7 +124,6 @@ colnames(freq_count_df) <- c("Times_seen", "Number_of_IPs")
 # 3.) In which area do you live Q
          To DO:
           # - include table of residents by location and add column with 2020 census data by location
-          # - reassign 'other' category (delete non-Jeffco, keep unassigned as 'other')
           # Create these figures by TOTAL HOUSEHOLD AGES
           # NOTE: Kevin provided a different number for the WEST END in and email
           # Explore different visualizations that include both geo area and responses on same figure, or multiple figures to break it up
@@ -137,34 +137,28 @@ census2020.dat <- read.csv(here("data","JeffCoCensus_Area_2020.csv"))
 # creates figure
 # make axis lables bold and larger; remove 'the' 
 
-# filter out 'other' category temporarily; need to go reclassify as possible
-Q3.dat <- ResidentSurvey.dat[!grepl("^Other \\(Please specify\\)", ResidentSurvey.dat$City.area), ]
-
-# filter out 'other' category temporarily; need to go reclassify as possible
-PRR_dat_cityarea <- ResidentSurvey.dat[grepl("^Other \\(Please specify\\)", ResidentSurvey.dat$City.area), ]
-
-# drop the blank entries
-Q3.dat <- filter(Q3.dat, City.area != "")
+# drop the blank City/area entries
+Q3.dat <- filter(ResidentSurvey.dat, City.area != "")
 
 # create a column of total individuals represented by the survey
 Q3.dat$Under7 <- as.numeric(Q3.dat$Under7)
-Q3.dat$`7_12` <- as.numeric(Q3.dat$`7_12`)
-Q3.dat$`13_18`<- as.numeric(Q3.dat$`13_18`)
-Q3.dat$`19_34`<- as.numeric(Q3.dat$`19_34`)
-Q3.dat$`35_54`<- as.numeric(Q3.dat$`35_54`)
-Q3.dat$`55_64`<- as.numeric(Q3.dat$`55-64`)
-Q3.dat$`65_74`<- as.numeric(Q3.dat$`65_74`)
-Q3.dat$`75_older`<- as.numeric(Q3.dat$`75_older`)
+Q3.dat$Age7_12 <- as.numeric(Q3.dat$Age7_12)
+Q3.dat$Age13_18 <- as.numeric(Q3.dat$Age13_18)
+Q3.dat$Age19_34 <- as.numeric(Q3.dat$Age19_34)
+Q3.dat$Age35_54 <- as.numeric(Q3.dat$Age35_54)
+Q3.dat$Age55_64 <- as.numeric(Q3.dat$Age55_64)
+Q3.dat$Age65_74 <- as.numeric(Q3.dat$Age65_74)
+Q3.dat$Age75_older <- as.numeric(Q3.dat$Age75_older)
 
 # calculate individuals by age category
 Under_7 <- sum(Q3.dat$Under7,na.rm=TRUE)
-Age_7_12 <- sum(Q3.dat$'7_12',na.rm=TRUE)
-Age_13_18 <- sum(Q3.dat$'13_18',na.rm=TRUE)
-Age_19_34 <- sum(Q3.dat$'19_34',na.rm=TRUE)
-Age_35_54 <- sum(Q3.dat$'35_54',na.rm=TRUE)
-Age_55_64 <- sum(Q3.dat$'55_64',na.rm=TRUE)
-Age_65_74 <- sum(Q3.dat$'65_74',na.rm=TRUE)
-Age_75_older <- sum(Q3.dat$'75_older',na.rm=TRUE)
+Age_7_12 <- sum(Q3.dat$Age7_12,na.rm=TRUE)
+Age_13_18 <- sum(Q3.dat$Age13_18,na.rm=TRUE)
+Age_19_34 <- sum(Q3.dat$Age19_34,na.rm=TRUE)
+Age_35_54 <- sum(Q3.dat$Age35_54,na.rm=TRUE)
+Age_55_64 <- sum(Q3.dat$Age55_64,na.rm=TRUE)
+Age_65_74 <- sum(Q3.dat$Age65_74,na.rm=TRUE)
+Age_75_older <- sum(Q3.dat$Age75_older,na.rm=TRUE)
 
 FullAgeDist.df <- data.frame(Under_7,Age_7_12,Age_13_18,Age_19_34,Age_35_54,Age_55_64,Age_65_74,Age_75_older)
 
@@ -201,8 +195,10 @@ ggsave(here("figures","AgeDistribution_AllSurveyIndividuals.png"), plot = plot, 
 
 
 #################################################3
-#verify these are the correct columns to sum all age categories
-TotalPeople <- rowSums(Q3.dat[7:13],na.rm=TRUE)
+# sum all age categories
+TotalPeople <- rowSums(Q3.dat[, c("Under7", "Age7_12", "Age13_18",
+        "Age19_34","Age35_54", "Age55_64", "Age65_74", "Age75_older")],na.rm = TRUE)
+
 Q3.dat <- data.frame(Q3.dat,TotalPeople)
 
 #rename PT inside city limits row
