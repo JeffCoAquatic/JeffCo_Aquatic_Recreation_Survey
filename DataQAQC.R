@@ -83,7 +83,7 @@ ResidentSurvey.dat <- survey.dat %>%
 
 ##########################################################################################
 #### manually inspecting partial responses
-#partial <- filter(ResidentSurvey.dat,Response.status=="PARTIAL")
+partial <- filter(ResidentSurvey.dat,Response.status=="PARTIAL")
 #write.csv(partial,file = "Partial.Responses.csv")
 
 # Remove partial survey entries where there was NO information beyond demographic categories (~56% of partial entries)
@@ -295,14 +295,10 @@ unique(ResidentSurvey.dat$Age75_older)
 table(ResidentSurvey.dat$Age75_older)
 
 
-
-# write a script that removes partial responses without info beyond required demographic information
-# Find the column index of "Age"
-age_col_index <- which(names(partial) == "Age")
 ### Replace locations reported in the 'Other' category with the area categories when possible
 ### Remove locations outside of county
 
-# Read in your CSV with corrected locations/area categories
+# Read in CSV with the manually corrected locations/area categories
 recode_area <- read.csv("OtherArea_reponses.csv")
 
 # Left join to add the revised city name to your main dataset
@@ -312,7 +308,7 @@ ResidentSurvey.dat <- ResidentSurvey.dat %>%
 # Recode City.area using city.area.revised where available
 ResidentSurvey.dat <- ResidentSurvey.dat %>%
   mutate(City.area = ifelse(!is.na(city.area.revised), city.area.revised, City.area)) %>%
-  select(-city.area.revised)  # Remove the helper column if no longer needed
+  select(-city.area.revised) 
 
 write.csv(ResidentSurvey.dat,file="JAC_Survey_3.31.25_CLEAN.csv")
 
