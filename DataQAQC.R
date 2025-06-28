@@ -10,6 +10,7 @@ library(stringr)
 ############################################################################################################
 ## Load and Clean Data for Analysis
 ############################################################################################################
+# load raw survey data, exactly as downloaded from survey platform upon survey close
 
 survey.dat <- read.csv(here("data",'JAC_Survey_3.31.25.csv'))
 
@@ -72,10 +73,10 @@ colnames.nonres <- c("Response.status","JeffCo_Visit_Freq","Visit_Season","Visit
 # column name reassignment verified and correct; step complete
 
 #####################################################################################################
-## Set Column Names and Remove Non-resident/tourist surveys
+## Set column names and separate non-resident/tourist surveys
 # columns 1-93 = resident survey questions
 # column 123 = comments
-# 
+
 ResidentSurvey.dat <- survey.dat %>%
   {cbind(.[, 1:93], .[, 123])} %>%
   filter(Do.you.live.in.Jefferson.County.!="No, I am visiting")%>%
@@ -108,18 +109,21 @@ ResidentSurvey.dat <- ResidentSurvey.dat %>%
 ## create nonresident survey data frame for future analysis 
 # columns 94-123 = nonresident survey questions
 # column 123 = comments
-#
+
 NonResidentSurvey.dat <- survey.dat %>%
   filter(Do.you.live.in.Jefferson.County.=="No, I am visiting")%>%
   select(4,94:123) %>%
   setNames(colnames.nonres)
 
-# write csv file that represents the FULL, unaltered dataset (aside from column renaming)
+Nonres.partial <- filter(NonResidentSurvey.dat, Response.status == 'PARTIAL')
+Nonres.complete <- filter(NonResidentSurvey.dat, Response.status == 'COMPLETE')
+
+# write csv file that represents the FULL, unaltered nonresident survey dataset (aside from column renaming)
 # write.csv(NonResidentSurvey.dat,file = "Nonresident_Survey_Responses_3.31.2025.csv")
 
 ######################################################################################################
 # save comments and survey ID as separate data frame - can link back to data with survey ID
-# 
+
 ResidentComment.dat <- ResidentSurvey.dat %>%
   select(Response.ID,Comments)
 # save csv file that represents the FULL, unaltered comment data for future analysis/linking to response data
@@ -128,6 +132,37 @@ ResidentComment.dat <- ResidentSurvey.dat %>%
 # drop the comment column in working data frame due to length; can link data to ResidentComment.dat using Response.ID
 ResidentSurvey.dat <- ResidentSurvey.dat %>%
   select(!Comments)
+
+######################################################################################################
+# Investigate duplicate IP addresses
+
+# create a table of IP addresses used in survey
+ip_freq_df <- as.data.frame(table(ResidentSurvey.dat$IP.address))
+colnames(ip_freq_df) <- c("IP.address", "Frequency")
+
+# set a threshold of more than 4 submissions from the same IP address; IP's with greater that 4 submissions were fully excluded 
+plus4 <- filter(ip_freq_df,Frequency>4)
+
+# create a barplot of the
+top_ips <- data[order(-plus4$Frequency), ]
+AnonID <- paste("Unique IP",1:length(top_ips$IP.address),sep=" ")
+top_ips$IP.address <- AnonID
+
+plot <- ggplot(top_ips, aes(x = reorder(IP.address, Frequency), y = Frequency)) +
+     geom_bar(stat = "identity", fill = viridis(1)) +
+     coord_flip() +
+    labs(
+         title = "Survey Submissions by IP Address",
+         x = "Anonymized IP Address",
+         y = "Number of Submissions"
+     ) +
+     theme_minimal()
+ 
+ ggsave(here("figures","SurveySubmissionsByIP_Over4.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
+ 
+# Investigate the IP addresses used multiple times, starting with highest use-case
+IP.investigation.83 <- filter(ResidentSurvey.dat,IP.address=="64.184.145.20")
+
 
 ##########################################################################################################
 ## Review each age category for entry errors and non-numeric entries 

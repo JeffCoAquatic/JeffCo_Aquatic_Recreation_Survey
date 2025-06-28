@@ -100,6 +100,14 @@ ip_freq <- table(ResidentSurvey.dat$IP.address)
 ip_freq_df <- as.data.frame(ip_freq)
 colnames(ip_freq_df) <- c("IP.address", "Frequency")
 
+ip_freq_over4 <- filter(ip_freq_df, Frequency > 4)
+
+# Plot the histogram using ggplot
+ggplot(ip_freq_over4, aes(x = Frequency)) +
+  geom_histogram(binwidth = 1, fill = "skyblue", color = "black") +
+  labs(x = "IP address replicates", y = "Frequency") +
+  theme_minimal()
+  
 # Plot the histogram using ggplot
 ggplot(ip_freq_df, aes(x = Frequency)) +
   geom_histogram(binwidth = 1, fill = "skyblue", color = "black") +
@@ -116,6 +124,51 @@ freq_count <- table(ip_freq)
 freq_count_df <- as.data.frame(freq_count)
 colnames(freq_count_df) <- c("Times_seen", "Number_of_IPs")
 
+ip_freq_over4$IP_ID <- paste0("IP", seq_len(nrow(ip_freq_over4)))
+
+# Plot
+plot <- ggplot(ip_freq_over4, aes(x = reorder(IP_ID, Frequency), y = Frequency)) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  labs(
+    title = "Number of Submissions per IP Address",
+    x = "IP Address (anonymized order)",
+    y = "Frequency of Submissions"
+  ) +
+  theme_minimal(base_size = 13)
+
+ggsave(here("figures","IP_addressesOver4Repeats.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
+
+#######
+# Remove Responses from IP address with more than 4 responses from the same IP address
+ips_to_remove <- c(
+  "104.28.116.129", "104.28.116.130", "104.28.116.131", "104.28.116.133",
+  "104.28.116.134", "104.28.116.135", "104.28.116.136", "146.75.136.223",
+  "169.204.230.226", "209.166.69.49", "209.166.69.54", "209.166.87.82",
+  "216.122.13.116", "24.113.125.226", "24.113.125.227", "64.184.145.20",
+  "66.133.58.231", "66.133.58.232", "66.96.64.66"
+)
+
+ResidentSurveyIP.dat <- ResidentSurvey.dat[!ResidentSurvey.dat$IP.address %in% ips_to_remove, ]
+
+```
+
+```{r}
+#list of submisison ID's where no data was entered beyond basic demographic info
+# See "PartialResponses.csv" for all partial survey responses and no data flags
+
+survey_id_nodata <- c(
+  "wrB669Dd", "LjCYPvXx", "W3CKRi57", "M0CYtV3I", "lkfOSlMH", "VCCK50rS", "elfRxUYm", "nEk07L6j",
+  "bKC4wpxG", "bdDTfvrM", "TgB6u4vs", "u0kqJRIf", "LDCYkW96", "u6fE6EZh", "hyCYb8Ul", "EWkaRMGf", 
+  "19B6uWA5", "T2CYwrxn", "0CCYA8lN", "nDCKFOw9", "AJC4gO1m", "BQfsUQwv", "kMC4MSVb", "StfFfwil", 
+  "PbCYqJVi", "6ek1abrz", "mIkh6czp", "G2CiTog4", "YDCKapcH", "nlCKM67V", "AoCiyqa4", "83kTxut7", 
+  "ZzCiOsIX", "aXCiKFc4", "1MDTyVyF", "iEDToYxY", "dEEBXT0w", "nDEBDe9W", "63fPOlnK", "Sifbmlr7", 
+  "77fpV8Oj", "qQfqZlTi", "Faf5Sia9", "GKff6LRu", "plCYtQ0h", "oHB6SXjl", "vLC4IKkz", "1mCYFICp", 
+  "aXfqDG3V", "WufIa78z", "nwC4FrV4", "MaC4YPlM", "sYklCl67"
+)
+
+# remove submissions without any data
+ResidentSurvey_clean <- ResidentSurveyIP.dat[!ResidentSurveyIP.dat$Response.ID %in% survey_id_nodata, ]
 
 ```
 
