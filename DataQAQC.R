@@ -13,6 +13,7 @@ library(stringr)
 # load raw survey data, exactly as downloaded from survey platform upon survey close
 
 survey.dat <- read.csv(here("data",'JAC_Survey_3.31.25.csv'))
+SampSizeRawData <- dim(survey.dat)[1] # 2988
 
 ############################################################################################################
 # replace longer column names with more easily referenced names
@@ -82,10 +83,28 @@ ResidentSurvey.dat <- survey.dat %>%
   filter(Do.you.live.in.Jefferson.County.!="No, I am visiting")%>%
   setNames(colnames.new)
 
+SampSizeResident <- dim(ResidentSurvey.dat)[1] # 2951
+
+######################################################################################################
+# save resident survey comments and survey ID as separate data frame - can link back to data with survey ID
+
+ResidentComment.dat <- ResidentSurvey.dat %>%
+  select(Response.ID,Comments)
+# save csv file that represents the FULL, unaltered comment data for future analysis/linking to response data
+# write.csv(ResidentComment.dat,"Comments_Final_3.31.25.csv")
+
+# drop the comment column in working data frame due to length; can link data to ResidentComment.dat using Response.ID
+ResidentSurvey.dat <- ResidentSurvey.dat %>%
+  select(!Comments)
+
 ##########################################################################################
 #### manually inspecting partial responses
 partial <- filter(ResidentSurvey.dat,Response.status=="PARTIAL")
 #write.csv(partial,file = "Partial.Responses.csv")
+complete <- filter(ResidentSurvey.dat,Response.status=="COMPLETED")
+
+SampSizeResPartial <- dim(partial)[1] # 153
+SampSizeResComplete <- dim(complete)[1] # 2798
 
 # Remove partial survey entries where there was NO information beyond demographic categories (~56% of partial entries)
 # Partial survey entries with any information past demographics were retained
@@ -101,9 +120,12 @@ remove_ids <- c("wrB669Dd", "LjCYPvXx", "W3CKRi57", "M0CYtV3I", "lkfOSlMH",
                 "GKff6LRu", "plCYtQ0h", "oHB6SXjl", "vLC4IKkz", "1mCYFICp",
                 "aXfqDG3V", "WufIa78z", "nwC4FrV4", "MaC4YPlM", "sYklCl67")
 
+NPartialRemoved <- length(remove_ids) # 55
+
 ResidentSurvey.dat <- ResidentSurvey.dat %>%
   filter(!Response.ID %in% remove_ids)
 
+SampSizeResPartRemoved <- dim(ResidentSurvey.dat)[1] #2896
 
 ######################################################################################################
 ## create nonresident survey data frame for future analysis 
@@ -116,22 +138,10 @@ NonResidentSurvey.dat <- survey.dat %>%
   setNames(colnames.nonres)
 
 Nonres.partial <- filter(NonResidentSurvey.dat, Response.status == 'PARTIAL')
-Nonres.complete <- filter(NonResidentSurvey.dat, Response.status == 'COMPLETE')
+Nonres.complete <- filter(NonResidentSurvey.dat, Response.status == 'COMPLETED')
 
 # write csv file that represents the FULL, unaltered nonresident survey dataset (aside from column renaming)
 # write.csv(NonResidentSurvey.dat,file = "Nonresident_Survey_Responses_3.31.2025.csv")
-
-######################################################################################################
-# save comments and survey ID as separate data frame - can link back to data with survey ID
-
-ResidentComment.dat <- ResidentSurvey.dat %>%
-  select(Response.ID,Comments)
-# save csv file that represents the FULL, unaltered comment data for future analysis/linking to response data
-# write.csv(ResidentComment.dat,"Comments_Final_3.31.25.csv")
-
-# drop the comment column in working data frame due to length; can link data to ResidentComment.dat using Response.ID
-ResidentSurvey.dat <- ResidentSurvey.dat %>%
-  select(!Comments)
 
 ######################################################################################################
 # Investigate duplicate IP addresses
@@ -143,7 +153,7 @@ colnames(ip_freq_df) <- c("IP.address", "Frequency")
 # set a threshold of more than 4 submissions from the same IP address; IP's with greater that 4 submissions were fully excluded 
 plus4 <- filter(ip_freq_df,Frequency>4)
 
-# create a barplot of the
+# create a barplot of IP address usage for flagged data
 top_ips <- data[order(-plus4$Frequency), ]
 AnonID <- paste("Unique IP",1:length(top_ips$IP.address),sep=" ")
 top_ips$IP.address <- AnonID
@@ -152,7 +162,7 @@ plot <- ggplot(top_ips, aes(x = reorder(IP.address, Frequency), y = Frequency)) 
      geom_bar(stat = "identity", fill = viridis(1)) +
      coord_flip() +
     labs(
-         title = "Survey Submissions by IP Address",
+         title = "IP Addresses with Greater than Four Submissions",
          x = "Anonymized IP Address",
          y = "Number of Submissions"
      ) +
@@ -160,9 +170,35 @@ plot <- ggplot(top_ips, aes(x = reorder(IP.address, Frequency), y = Frequency)) 
  
  ggsave(here("figures","SurveySubmissionsByIP_Over4.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
  
-# Investigate the IP addresses used multiple times, starting with highest use-case
-IP.investigation.83 <- filter(ResidentSurvey.dat,IP.address=="64.184.145.20")
+# Remove survey entries from IP addresses associated with more than 4 submissions
+  IP_duplicates <- as.character(plus4$IP.address)
 
+  # Survey data w/ flagged IP addresses (to be removed)
+  FlaggedIPSurvey.dat <- ResidentSurvey.dat %>%
+    filter(IP.address %in% IP_duplicates)
+  
+  # Investigate the IP addresses used greater than 4 times
+  write.csv(FlaggedIPSurvey.dat,file="FlaggedIPSurveyData.csv")
+  
+  IPEntriesRemoved <- dim(FlaggedIPSurvey.dat)[1] # 264
+  
+  # Remove flagged IP data from analysis  
+  ResidentSurvey.dat <- ResidentSurvey.dat %>%
+   filter(!IP.address %in% IP_duplicates)
+  
+  SampSizeAfterIPRemoval <- dim(ResidentSurvey.dat)[1] # 2632
+  
+# Investigate the IP addresses used multiple times, starting with highest use-case
+IP.investigation.83 <- filter(FlaggedIPSurvey.dat,IP.address=="64.184.145.20")
+
+  #Owner/Network: Northwest Open Access Network (NOANet)
+  #Location: Approximate geolocation places it in or around Jefferson County / Port Townsend, WA
+  #Usage Context: The IP block is linked to local municipal and public infrastructure, such as co.jefferson.wa.us and cityofpt.us.
+  #81 out of 83 submissions originated from a Windows PC
+  #1 submission each came from an Android and an iPhone
+  #Lack of device diversity is inconsistent with typical shared or public-access networks (which usually show varied device types)
+  #Many entries were submitted at the exact same minute, and several had zero or near-zero time between them
+  #A cluster of submissions occurred around February 11, 2025, at 2:17–2:18pm, with multiple responses submitted within seconds of each other
 
 ##########################################################################################################
 ## Review each age category for entry errors and non-numeric entries 
@@ -214,12 +250,14 @@ table(ResidentSurvey.dat$Age13_18)
 ResidentSurvey.dat <- ResidentSurvey.dat %>%
   mutate(
     Age13_18 = str_trim(Age13_18),
+    Age13_18 = str_replace_all(Age13_18, "1[’'`]", "1"),  # replace 1’ or 1' or 1` with 1
     Age13_18 = case_when(
-    str_to_upper(Age13_18) %in% c("","0", "00", "O", "None") ~ NA_character_,
-    !str_detect(Age13_18, "^\\d+$") ~ NA_character_,  # remove anything non-numeric
-    TRUE ~ Age13_18
-  ),
-Age13_18 = as.numeric(Age13_18))
+      str_to_upper(Age13_18) %in% c("", "0", "00", "O", "NONE") ~ NA_character_,
+      !str_detect(Age13_18, "^\\d+$") ~ NA_character_,  # remove anything still non-numeric
+      TRUE ~ Age13_18
+    ),
+    Age13_18 = as.numeric(Age13_18)
+  )
 
 # re-inspect
 unique(ResidentSurvey.dat$Age13_18)
