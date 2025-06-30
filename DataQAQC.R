@@ -373,6 +373,7 @@ table(ResidentSurvey.dat$Age75_older)
 
 # Read in CSV with the manually corrected locations/area categories
 recode_area <- read.csv("OtherArea_reponses.csv")
+N.AreaNamesRev <- dim(recode_area)[1]
 
 # Left join to add the revised city name to your main dataset
 ResidentSurvey.dat <- ResidentSurvey.dat %>%
@@ -385,4 +386,17 @@ ResidentSurvey.dat <- ResidentSurvey.dat %>%
 
 write.csv(ResidentSurvey.dat,file="JAC_Survey_3.31.25_CLEAN.csv")
 
+# Create summary table of changes to data
+
+DataSummary <- matrix(NA,)
+
+SampSizeRawData
+SampSizeResident
+SampSizeResPartial 
+SampSizeResComplete 
+NPartialRemoved 
+ResidentSurvey.dat 
+SampSizeResPartRemoved 
+IPEntriesRemoved 
+SampSizeAfterIPRemoval 
 
