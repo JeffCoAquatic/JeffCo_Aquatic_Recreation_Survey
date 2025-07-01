@@ -86,14 +86,8 @@ gtsave(table_gt, here::here("tables","SurveyStatusTable.rtf"))
 ```
 
 
+## Load region and age-specific 2020 census data
 
-## Question 3. In which city or area do you live?
-# 3.) In which area do you live Q
-         To DO:
-          # - include table of residents by location and add column with 2020 census data by location
-          # Create these figures by TOTAL HOUSEHOLD AGES
-          # NOTE: Kevin provided a different number for the WEST END in an email
-          # Explore different visualizations that include both geo area and responses on same figure, or multiple figures to break it up
 ```{r}
 # include 2020 census data from Kevin (County GIS)
 # summarize census data across all age groups by City.area, and for those over 18; create summary table
@@ -114,7 +108,7 @@ Census.dat <- Census.dat %>%
 
 # Group and summarize by City.area
 CensusCityAreaSummary <- Census.dat %>%
-  group_by(Geographic.Area..Survey.) %>%
+  group_by(City.area) %>%
   summarise(
     CensusTotal = sum(CensusTotal, na.rm = TRUE),
     CensusOver18   = sum(CensusOver18, na.rm = TRUE),
@@ -124,9 +118,8 @@ CensusCityAreaSummary <- Census.dat %>%
     PropCensusTotal = CensusTotal/ sum(CensusTotal),
     PropCensusOver18   = CensusOver18 / sum(CensusOver18)
   ) %>%
-  arrange(Geographic.Area..Survey.)
+  arrange(City.area)
 
-print(CensusCityAreaSummary)
 write.csv(CensusCityAreaSummary,file="CensusCityAreaSummary.csv")
 
 
@@ -169,65 +162,73 @@ CityAreaSummary <- Q2.dat %>%
   ) %>%
   arrange(City.area)
 
-# View the cleaned summary
-print(CityAreaSummary)
 write.csv(CityAreaSummary,file="SurveyCityAreaSummary.csv")
 
+#create figures of side-by-side comparisons of census vs survey representation by area
+# first plot by ALL age groups
+survey_area_allages <- CityAreaSummary %>% 
+  select(City.area,PropRepresented) %>% 
+  mutate(DataSource = "Survey") %>% 
+  rename(Proportion = PropRepresented)
 
+census_area_allages <- CensusCityAreaSummary %>% 
+  select(City.area, PropCensusTotal) %>% 
+  mutate(DataSource = "Census")%>% 
+  rename(Proportion = PropCensusTotal) 
 
-census_proportion <- round(Census.dat$Count/sum(Census.dat$Count),3)
-proportion <- c(survey_proportion_resp,survey_proportion_total,census_proportion)
-
-DataSource <- c(rep("Survey_Resp",dim(city_area_resp)[1]),rep("Survey_Total",dim(city_area_total)[1]),rep("Census",dim(census2020.dat)[1]))
-
-city_area_census <- rbind(city_area_resp,city_area_total,census2020.dat)
-city_area_census <- cbind(city_area_census,proportion,DataSource)
-
-# Create a bar plot side by side with census data
-plot <- ggplot(city_area_census, aes(x = City.area, y = proportion, fill = DataSource)) +
+survey_census_area_allages <- rbind(survey_area_allages,census_area_allages)
+  
+# Create a bar plot side by side with census data - full age range
+plot <- ggplot(survey_census_area_allages, aes(x = City.area, y = Proportion, fill = DataSource)) +
   geom_bar(stat = "identity", position = "dodge") + 
   scale_fill_viridis(discrete = TRUE) +  # Use a colorblind-friendly palette
-  labs(title = "Population vs Respondents by Area",
+  labs(title = "Proportion of Population and Survey Repondants by Area (all age groups)",
        x = "",
        y = "Geographic Distribution (%)",
        legend = "Data Source") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1,size = 12, face = "bold"),
-    plot.title = element_text(size = 20, face = "bold"),
-    axis.title.y = element_text(size = 15, face = "bold"),
+    plot.title = element_text(size = 16, face = "bold"),
+    axis.title.y = element_text(size = 14, face = "bold"),
     axis.text.y = element_text(size = 12, face = "bold"),
     legend.text = element_text(size = 12, face = "bold"),
     legend.title = element_text(size = 14, face = "bold"))
 
-print(plot)
 # save figure with fixed dimensions to standardize w/others
-ggsave(here("figures","Census_Survey_Area_Fig_AllData.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
+ggsave(here("figures","Census_Survey_Area_Fig_AllAges.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
 
-city_area_census <- city_area_census %>%
-            filter(DataSource!="Survey_Resp")%>%
-            mutate(DataSource = recode(DataSource,"Survey_Total" = "Survey"))
+#create figures of side-by-side comparisons of census vs survey representation by area
+# plot by ages over 18 and over
+survey_area_over18 <- CityAreaSummary %>% 
+  select(City.area,PropRepOver18) %>% 
+  mutate(DataSource = "Survey") %>% 
+  rename(Proportion = PropRepOver18)
 
-# Create a bar plot with a colorblind-friendly palette and select only Census and Survey Total Data
-plot <- ggplot(city_area_census, aes(x = City.area, y = proportion, fill = DataSource)) +
+census_area_over18 <- CensusCityAreaSummary %>% 
+  select(City.area, PropCensusOver18) %>% 
+  mutate(DataSource = "Census")%>% 
+  rename(Proportion = PropCensusOver18)
+
+survey_census_area_over18 <- rbind(survey_area_over18,census_area_over18)
+  
+# Create a bar plot side by side with census data - full age range
+plot <- ggplot(survey_census_area_over18, aes(x = City.area, y = Proportion, fill = DataSource)) +
   geom_bar(stat = "identity", position = "dodge") + 
-  scale_fill_viridis(discrete = TRUE) +  
-  labs(title = "Population vs Respondents by Area",
+  scale_fill_viridis(discrete = TRUE) +  # Use a colorblind-friendly palette
+  labs(title = "Proportion of Population and Survey Repondants by Area (Over 18)",
        x = "",
        y = "Geographic Distribution (%)",
        legend = "Data Source") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1,size = 12, face = "bold"),
-    plot.title = element_text(size = 20, face = "bold"),
-    axis.title.y = element_text(size = 15, face = "bold"),
+    plot.title = element_text(size = 16, face = "bold"),
+    axis.title.y = element_text(size = 14, face = "bold"),
     axis.text.y = element_text(size = 12, face = "bold"),
     legend.text = element_text(size = 12, face = "bold"),
-    legend.title = element_text(size = 14, face = "bold")
-  )  
-
-print(plot)
+    legend.title = element_text(size = 14, face = "bold"))
 
 # save figure with fixed dimensions to standardize w/others
-ggsave(here("figures","Census_Survey_Area_Fig_Total.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
+ggsave(here("figures","Census_Survey_Area_Fig_Over18.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
 
 ```
 
