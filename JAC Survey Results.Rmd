@@ -96,11 +96,141 @@ gtsave(table_gt, here::here("tables","SurveyStatusTable.rtf"))
           # Explore different visualizations that include both geo area and responses on same figure, or multiple figures to break it up
 ```{r}
 # include 2020 census data from Kevin (County GIS)
+# summarize census data across all age groups by City.area, and for those over 18; create summary table
+
 Census.dat <- read.csv(here("data","AgeCensusDataDetailed.csv"))
+
+# Define age group columns
+all_age_cols <- c("Under_7", "Age_7_12", "Age_13_18", "Age_19_34", "Age_35_54", "Age_55_64", "Age_65_74", "Age_75_plus")
+adult_age_cols <- c("Age_19_34", "Age_35_54", "Age_55_64", "Age_65_74", "Age_75_plus")
+
+# Convert to numeric and calculate row-wise totals
+Census.dat[all_age_cols] <- lapply(Census.dat[all_age_cols], as.numeric)
+Census.dat <- Census.dat %>%
+  mutate(
+    CensusTotal = rowSums(select(., all_of(all_age_cols)), na.rm = TRUE),
+    CensusOver18   = rowSums(select(., all_of(adult_age_cols)), na.rm = TRUE)
+  )
+
+# Group and summarize by City.area
+CensusCityAreaSummary <- Census.dat %>%
+  group_by(Geographic.Area..Survey.) %>%
+  summarise(
+    CensusTotal = sum(CensusTotal, na.rm = TRUE),
+    CensusOver18   = sum(CensusOver18, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    PropCensusTotal = CensusTotal/ sum(CensusTotal),
+    PropCensusOver18   = CensusOver18 / sum(CensusOver18)
+  ) %>%
+  arrange(Geographic.Area..Survey.)
+
+print(CensusCityAreaSummary)
+write.csv(CensusCityAreaSummary,file="CensusCityAreaSummary.csv")
+
 
 #Note from email from Kevin to Diane on 3/11 regarding West End census numbers: "Using the Washington Office of Financial Management (OFM) adjusted redistricting data it brings the West End population down to 458 people or 1.4% with the inmate population moved to last known residence. The unadjusted West End population was 776."
 
 ```
+
+```{r}
+# Question 2 - in which city or area do you live
+
+# Clean City.area field and remove ambiguous entries
+Q2.dat <- ResidentSurvey.dat %>%
+  filter(City.area != "" & !is.na(City.area)) %>%
+  mutate(City.area = recode(City.area,
+                            "Port Townsend (outside the city limits)" = "Port Townsend (outside city limits)"))
+
+# Define age group columns
+all_age_cols <- c("Under7", "Age7_12", "Age13_18", "Age19_34", "Age35_54", "Age55_64", "Age65_74", "Age75_older")
+adult_age_cols <- c("Age19_34", "Age35_54", "Age55_64", "Age65_74", "Age75_older")
+
+# Convert to numeric and calculate row-wise totals
+Q2.dat[all_age_cols] <- lapply(Q2.dat[all_age_cols], as.numeric)
+Q2.dat <- Q2.dat %>%
+  mutate(
+    TotalRepresented = rowSums(select(., all_of(all_age_cols)), na.rm = TRUE),
+    TotalRepOver18   = rowSums(select(., all_of(adult_age_cols)), na.rm = TRUE)
+  )
+
+# Group and summarize by City.area
+CityAreaSummary <- Q2.dat %>%
+  group_by(City.area) %>%
+  summarise(
+    TotalRepresented = sum(TotalRepresented, na.rm = TRUE),
+    TotalRepOver18   = sum(TotalRepOver18, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    PropRepresented = TotalRepresented / sum(TotalRepresented),
+    PropRepOver18   = TotalRepOver18 / sum(TotalRepOver18)
+  ) %>%
+  arrange(City.area)
+
+# View the cleaned summary
+print(CityAreaSummary)
+write.csv(CityAreaSummary,file="SurveyCityAreaSummary.csv")
+
+
+
+census_proportion <- round(Census.dat$Count/sum(Census.dat$Count),3)
+proportion <- c(survey_proportion_resp,survey_proportion_total,census_proportion)
+
+DataSource <- c(rep("Survey_Resp",dim(city_area_resp)[1]),rep("Survey_Total",dim(city_area_total)[1]),rep("Census",dim(census2020.dat)[1]))
+
+city_area_census <- rbind(city_area_resp,city_area_total,census2020.dat)
+city_area_census <- cbind(city_area_census,proportion,DataSource)
+
+# Create a bar plot side by side with census data
+plot <- ggplot(city_area_census, aes(x = City.area, y = proportion, fill = DataSource)) +
+  geom_bar(stat = "identity", position = "dodge") + 
+  scale_fill_viridis(discrete = TRUE) +  # Use a colorblind-friendly palette
+  labs(title = "Population vs Respondents by Area",
+       x = "",
+       y = "Geographic Distribution (%)",
+       legend = "Data Source") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1,size = 12, face = "bold"),
+    plot.title = element_text(size = 20, face = "bold"),
+    axis.title.y = element_text(size = 15, face = "bold"),
+    axis.text.y = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 12, face = "bold"),
+    legend.title = element_text(size = 14, face = "bold"))
+
+print(plot)
+# save figure with fixed dimensions to standardize w/others
+ggsave(here("figures","Census_Survey_Area_Fig_AllData.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
+
+city_area_census <- city_area_census %>%
+            filter(DataSource!="Survey_Resp")%>%
+            mutate(DataSource = recode(DataSource,"Survey_Total" = "Survey"))
+
+# Create a bar plot with a colorblind-friendly palette and select only Census and Survey Total Data
+plot <- ggplot(city_area_census, aes(x = City.area, y = proportion, fill = DataSource)) +
+  geom_bar(stat = "identity", position = "dodge") + 
+  scale_fill_viridis(discrete = TRUE) +  
+  labs(title = "Population vs Respondents by Area",
+       x = "",
+       y = "Geographic Distribution (%)",
+       legend = "Data Source") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1,size = 12, face = "bold"),
+    plot.title = element_text(size = 20, face = "bold"),
+    axis.title.y = element_text(size = 15, face = "bold"),
+    axis.text.y = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 12, face = "bold"),
+    legend.title = element_text(size = 14, face = "bold")
+  )  
+
+print(plot)
+
+# save figure with fixed dimensions to standardize w/others
+ggsave(here("figures","Census_Survey_Area_Fig_Total.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
+
+```
+
 
 ```{r}
 # create demographic figures
@@ -216,90 +346,6 @@ plot <- ggplot(SurveyAgeDist_long, aes(x = SurveyAgeBins, y = Proportion, fill =
 ggsave(here("figures","AgeDistribution_SurveyCensusProportions.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
 
 #################################################
-# sum all age categories
-TotalPeople <- rowSums(Q3.dat[, c("Under7", "Age7_12", "Age13_18",
-        "Age19_34","Age35_54", "Age55_64", "Age65_74", "Age75_older")],na.rm = TRUE)
-
-Q3.dat <- data.frame(Q3.dat,TotalPeople)
-
-#rename PT inside city limits row
-Q3.dat <- Q3.dat %>%
-  mutate(City.area = recode(City.area, 
-  "Port Townsend (outside the city limits)" = "Port Townsend (outside city limits)"))
-
-
-# Count the occurrences of each unique 'City.area' (represents population of respondants only)
-# Convert the table to a data frame for ggplot
-city_area_count_resp <- table(Q3.dat$City.area)
-city_area_resp <- as.data.frame(city_area_count_resp)
-colnames(city_area_resp) <- c("City.area", "Count")
-survey_proportion_resp <- round(city_area_resp$Count/sum(city_area_resp$Count),3)
-
-# Count the total number of respondants by City.area
-# Calculate as proportion of surveyed population by area
-city_area_total <- Q3.dat %>%
-      select(City.area,TotalPeople) %>%
-      group_by(City.area) %>%
-      summarize(Total = sum(TotalPeople))%>%
-      rename(Count=Total)
-
-survey_proportion_total <- round(city_area_total$Count/sum(city_area_total$Count),3)
-
-census_proportion <- round(census2020.dat$Count/sum(census2020.dat$Count),3)
-proportion <- c(survey_proportion_resp,survey_proportion_total,census_proportion)
-
-DataSource <- c(rep("Survey_Resp",dim(city_area_resp)[1]),rep("Survey_Total",dim(city_area_total)[1]),rep("Census",dim(census2020.dat)[1]))
-
-city_area_census <- rbind(city_area_resp,city_area_total,census2020.dat)
-city_area_census <- cbind(city_area_census,proportion,DataSource)
-
-# Create a bar plot side by side with census data
-plot <- ggplot(city_area_census, aes(x = City.area, y = proportion, fill = DataSource)) +
-  geom_bar(stat = "identity", position = "dodge") + 
-  scale_fill_viridis(discrete = TRUE) +  # Use a colorblind-friendly palette
-  labs(title = "Population vs Respondents by Area",
-       x = "",
-       y = "Geographic Distribution (%)",
-       legend = "Data Source") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1,size = 12, face = "bold"),
-    plot.title = element_text(size = 20, face = "bold"),
-    axis.title.y = element_text(size = 15, face = "bold"),
-    axis.text.y = element_text(size = 12, face = "bold"),
-    legend.text = element_text(size = 12, face = "bold"),
-    legend.title = element_text(size = 14, face = "bold"))
-
-print(plot)
-# save figure with fixed dimensions to standardize w/others
-ggsave(here("figures","Census_Survey_Area_Fig_AllData.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
-
-city_area_census <- city_area_census %>%
-            filter(DataSource!="Survey_Resp")%>%
-            mutate(DataSource = recode(DataSource,"Survey_Total" = "Survey"))
-
-# Create a bar plot with a colorblind-friendly palette and select only Census and Survey Total Data
-plot <- ggplot(city_area_census, aes(x = City.area, y = proportion, fill = DataSource)) +
-  geom_bar(stat = "identity", position = "dodge") + 
-  scale_fill_viridis(discrete = TRUE) +  
-  labs(title = "Population vs Respondents by Area",
-       x = "",
-       y = "Geographic Distribution (%)",
-       legend = "Data Source") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1,size = 12, face = "bold"),
-    plot.title = element_text(size = 20, face = "bold"),
-    axis.title.y = element_text(size = 15, face = "bold"),
-    axis.text.y = element_text(size = 12, face = "bold"),
-    legend.text = element_text(size = 12, face = "bold"),
-    legend.title = element_text(size = 14, face = "bold")
-  )  
-
-print(plot)
-
-# save figure with fixed dimensions to standardize w/others
-ggsave(here("figures","Census_Survey_Area_Fig_Total.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
-
-
 ```
 
 ```{r}

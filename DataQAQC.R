@@ -367,9 +367,11 @@ ResidentSurvey.dat <- ResidentSurvey.dat %>%
 unique(ResidentSurvey.dat$Age75_older)
 table(ResidentSurvey.dat$Age75_older)
 
-
 ### Replace locations reported in the 'Other' category with the area categories when possible
 ### Remove locations outside of county
+
+uniq.locations <- unique(ResidentSurvey.dat$City.area)
+filter(ResidentSurvey.dat,City.area == "Other (Please specify)")
 
 # Read in CSV with the manually corrected locations/area categories
 recode_area <- read.csv("OtherArea_reponses.csv")
