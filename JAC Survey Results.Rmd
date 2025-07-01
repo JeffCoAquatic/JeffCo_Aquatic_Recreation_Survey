@@ -11,15 +11,6 @@ output:
 knitr::opts_chunk$set(echo = FALSE)
 ```
 
-# General notes - choose color-blind friendly palette, inlcude number of response stats for each question
-
-# tabulate the number of people by geo area relative to census data - how far off the mark?
-
-##Tables and Figures to Include:
-
- are there other categories that matter and/or other ways to weight the data?
- 
- 
 
 
 ```{r}
@@ -43,11 +34,18 @@ source('DataQAQC.R')
 
 ```{r}
 
+Response.type <- c("Complete","Partial - retained","Partial - no data/dropped")
+
 Res.responses <- as.data.frame(table(ResidentSurvey.dat$Response.status))
 Nonres.responses <- as.data.frame(table(NonResidentSurvey.dat$Response.status))
 
-Total.responses <- data.frame(Res.responses$Var1,Res.responses$Freq,Nonres.responses$Freq)
+Res.responses <- c(Res.responses$Freq[1],Res.responses$Freq[2],length(remove_ids))
+Nonres.responses <- c(Nonres.responses$Freq[1],1,3) # manually examined the four non-res partial entries and determined only 1 included information
+
+Total.responses <- cbind(Response.type,Res.responses,Nonres.responses)
 colnames(Total.responses) <- c("Survey Status","Resident","Non-resident")
+Total.responses <- as.data.frame(Total.responses)
+
 data <- Total.responses
 num.rows <- dim(data)[1]
 
@@ -88,120 +86,27 @@ gtsave(table_gt, here::here("tables","SurveyStatusTable.rtf"))
 ```
 
 
-```
-### 2.) Make histogram of duplicate IP's, state the ways we limited the survey responses (one per device and CAPTCHA) 
-
-```{r}
-
-# create a table of IP addresses used in survey
-ip_freq <- table(ResidentSurvey.dat$IP.address)
-
-# Convert the frequency table to a data frame
-ip_freq_df <- as.data.frame(ip_freq)
-colnames(ip_freq_df) <- c("IP.address", "Frequency")
-
-ip_freq_over4 <- filter(ip_freq_df, Frequency > 4)
-
-# Plot the histogram using ggplot
-ggplot(ip_freq_over4, aes(x = Frequency)) +
-  geom_histogram(binwidth = 1, fill = "skyblue", color = "black") +
-  labs(x = "IP address replicates", y = "Frequency") +
-  theme_minimal()
-  
-# Plot the histogram using ggplot
-ggplot(ip_freq_df, aes(x = Frequency)) +
-  geom_histogram(binwidth = 1, fill = "skyblue", color = "black") +
-  labs(x = "IP address replicates", y = "Frequency") +
-  theme_minimal()
-  
-# Count the frequency of each unique IP address
-ip_freq <- table(ResidentSurvey.dat$IP.address)
-
-# Count how many IP addresses were seen 1 time, 2 times, etc.
-freq_count <- table(ip_freq)
-
-# Convert the result to a data frame
-freq_count_df <- as.data.frame(freq_count)
-colnames(freq_count_df) <- c("Times_seen", "Number_of_IPs")
-
-ip_freq_over4$IP_ID <- paste0("IP", seq_len(nrow(ip_freq_over4)))
-
-# Plot
-plot <- ggplot(ip_freq_over4, aes(x = reorder(IP_ID, Frequency), y = Frequency)) +
-  geom_col(fill = "steelblue") +
-  coord_flip() +
-  labs(
-    title = "Number of Submissions per IP Address",
-    x = "IP Address (anonymized order)",
-    y = "Frequency of Submissions"
-  ) +
-  theme_minimal(base_size = 13)
-
-ggsave(here("figures","IP_addressesOver4Repeats.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
-
-#######
-# Remove Responses from IP address with more than 4 responses from the same IP address
-ips_to_remove <- c(
-  "104.28.116.129", "104.28.116.130", "104.28.116.131", "104.28.116.133",
-  "104.28.116.134", "104.28.116.135", "104.28.116.136", "146.75.136.223",
-  "169.204.230.226", "209.166.69.49", "209.166.69.54", "209.166.87.82",
-  "216.122.13.116", "24.113.125.226", "24.113.125.227", "64.184.145.20",
-  "66.133.58.231", "66.133.58.232", "66.96.64.66"
-)
-
-ResidentSurveyIP.dat <- ResidentSurvey.dat[!ResidentSurvey.dat$IP.address %in% ips_to_remove, ]
-
-```
-
-```{r}
-#list of submisison ID's where no data was entered beyond basic demographic info
-# See "PartialResponses.csv" for all partial survey responses and no data flags
-
-survey_id_nodata <- c(
-  "wrB669Dd", "LjCYPvXx", "W3CKRi57", "M0CYtV3I", "lkfOSlMH", "VCCK50rS", "elfRxUYm", "nEk07L6j",
-  "bKC4wpxG", "bdDTfvrM", "TgB6u4vs", "u0kqJRIf", "LDCYkW96", "u6fE6EZh", "hyCYb8Ul", "EWkaRMGf", 
-  "19B6uWA5", "T2CYwrxn", "0CCYA8lN", "nDCKFOw9", "AJC4gO1m", "BQfsUQwv", "kMC4MSVb", "StfFfwil", 
-  "PbCYqJVi", "6ek1abrz", "mIkh6czp", "G2CiTog4", "YDCKapcH", "nlCKM67V", "AoCiyqa4", "83kTxut7", 
-  "ZzCiOsIX", "aXCiKFc4", "1MDTyVyF", "iEDToYxY", "dEEBXT0w", "nDEBDe9W", "63fPOlnK", "Sifbmlr7", 
-  "77fpV8Oj", "qQfqZlTi", "Faf5Sia9", "GKff6LRu", "plCYtQ0h", "oHB6SXjl", "vLC4IKkz", "1mCYFICp", 
-  "aXfqDG3V", "WufIa78z", "nwC4FrV4", "MaC4YPlM", "sYklCl67"
-)
-
-# remove submissions without any data
-ResidentSurvey_clean <- ResidentSurveyIP.dat[!ResidentSurveyIP.dat$Response.ID %in% survey_id_nodata, ]
-
-```
-
 
 ## Question 3. In which city or area do you live?
 # 3.) In which area do you live Q
          To DO:
           # - include table of residents by location and add column with 2020 census data by location
           # Create these figures by TOTAL HOUSEHOLD AGES
-          # NOTE: Kevin provided a different number for the WEST END in and email
+          # NOTE: Kevin provided a different number for the WEST END in an email
           # Explore different visualizations that include both geo area and responses on same figure, or multiple figures to break it up
 ```{r}
-#include census data from Kevin; he provided numbers from 2020 survey broken down by the same 
-census2020.dat <- read.csv(here("data","JeffCoCensus_Area_2020.csv"))
+# include 2020 census data from Kevin (County GIS)
+Census.dat <- read.csv(here("data","AgeCensusDataDetailed.csv"))
+
+#Note from email from Kevin to Diane on 3/11 regarding West End census numbers: "Using the Washington Office of Financial Management (OFM) adjusted redistricting data it brings the West End population down to 458 people or 1.4% with the inmate population moved to last known residence. The unadjusted West End population was 776."
 
 ```
 
 ```{r}
-# creates figure
-# make axis lables bold and larger; remove 'the' 
+# create demographic figures
 
-# drop the blank City/area entries
-Q3.dat <- filter(ResidentSurvey.dat, City.area != "")
-
-# create a column of total individuals represented by the survey
-Q3.dat$Under7 <- as.numeric(Q3.dat$Under7)
-Q3.dat$Age7_12 <- as.numeric(Q3.dat$Age7_12)
-Q3.dat$Age13_18 <- as.numeric(Q3.dat$Age13_18)
-Q3.dat$Age19_34 <- as.numeric(Q3.dat$Age19_34)
-Q3.dat$Age35_54 <- as.numeric(Q3.dat$Age35_54)
-Q3.dat$Age55_64 <- as.numeric(Q3.dat$Age55_64)
-Q3.dat$Age65_74 <- as.numeric(Q3.dat$Age65_74)
-Q3.dat$Age75_older <- as.numeric(Q3.dat$Age75_older)
+# drop ambiguous entries for this question only
+Q3.dat <- filter(ResidentSurvey.dat, City.area != "") # removes 10 responses where individuals put multiple locations under city/area of residence or simply put 'olympic peninsula'
 
 # calculate individuals by age category
 Under_7 <- sum(Q3.dat$Under7,na.rm=TRUE)
@@ -213,41 +118,104 @@ Age_55_64 <- sum(Q3.dat$Age55_64,na.rm=TRUE)
 Age_65_74 <- sum(Q3.dat$Age65_74,na.rm=TRUE)
 Age_75_older <- sum(Q3.dat$Age75_older,na.rm=TRUE)
 
-FullAgeDist.df <- data.frame(Under_7,Age_7_12,Age_13_18,Age_19_34,Age_35_54,Age_55_64,Age_65_74,Age_75_older)
+SurveyAges <- c(Under_7,Age_7_12,Age_13_18,Age_19_34,Age_35_54,Age_55_64,Age_65_74,Age_75_older)
+
+SurveyAgeBins <- c("Under 7","Age 7-12", "Age 13-18","Age 19-34","Age 35-54","Age 55-64","Age 65-74", "75 and over")
+
+CensusAges <- c(sum(Census.dat$Under_7),sum(Census.dat$Age_7_12),sum(Census.dat$Age_13_18),sum(Census.dat$Age_19_34),sum(Census.dat$Age_35_54),sum(Census.dat$Age_55_64),
+                   sum(Census.dat$Age_65_74),sum(Census.dat$Age_75_plus))
+
+SurveyAgeDist.df <- data.frame(SurveyAgeBins, SurveyAges, CensusAges)
+write.csv(SurveyAgeDist.df,file = "SurveyCensusAgeDistribution.csv")
 
 ######################################
-# Create a barplot of the full age distribution of indivs represented by survey:
-# Reshape the data for ggplot (long format)
-FullAgeDist.long <- FullAgeDist.df %>%
-  gather(key = "AgeGroup", value = "Frequency")
-
-# Reorder the AgeGroup factor so it's from youngest to oldest
-FullAgeDist.long$AgeGroup <- factor(FullAgeDist.long$AgeGroup, 
-                                    levels = c("Under_7", "Age_7_12", "Age_13_18", 
-                                               "Age_19_34", "Age_35_54", "Age_55_64", 
-                                               "Age_65_74", "Age_75_older"))
+# Ensure correct age order (youngest to oldest)
+SurveyAgeDist.df$SurveyAgeBins <- factor(
+  SurveyAgeDist.df$SurveyAgeBins,
+  levels = c("Under 7", "Age 7-12", "Age 13-18", "Age 19-34",
+             "Age 35-54", "Age 55-64", "Age 65-74", "75 and over")
+)
+# Reshape to long format for plotting
+SurveyAgeDist_long <- SurveyAgeDist.df %>%
+  pivot_longer(cols = c(SurveyAges, CensusAges),
+               names_to = "Source",
+               values_to = "Count")
 
 # Create the bar plot with uniform fill color and without the legend
-plot <- ggplot(FullAgeDist.long, aes(x = AgeGroup, y = Frequency)) +
+plot <- ggplot(SurveyAgeDist.df, aes(x = SurveyAgeBins, y = SurveyAges)) +
   geom_bar(stat = "identity", position = "dodge", fill = viridis(1)) +  # Use viridis color palette
-  geom_text(aes(label = Frequency), vjust = -0.3, size = 5, fontface = "bold") +  # Add text labels on top of bars
+  #geom_text(aes(label = Frequency), vjust = -0.3, size = 5, fontface = "bold") +  # Add text labels on top of bars
   labs(title = "Age Distribution of Surveyed Individuals",
-       x = "Age Group",
-       y = "Frequency") +
+       x = "",
+       y = "Number of People") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12, face = "bold"),
-        plot.title = element_text(size = 20, face = "bold"),
-        axis.title.y = element_text(size = 15, face = "bold"),
+        plot.title = element_text(size = 16, face = "bold"),
+        axis.title.y = element_text(size = 14, face = "bold"),
         axis.text.y = element_text(size = 12, face = "bold"),
         legend.position = "none",  # Remove the legend
         plot.margin = margin(1, 1, 2, 1))  # Add margin at the bottom to prevent cutting off labels
 
-# Display the plot and save to figures folder
-print(plot)
 ggsave(here("figures","AgeDistribution_AllSurveyIndividuals.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
 
+# plot the age distribution alongside the census age distribution
+# absolute values 
+plot <- ggplot(SurveyAgeDist_long, aes(x = SurveyAgeBins, y = Count, fill = Source)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
+  geom_text(aes(label = Count),
+            position = position_dodge(width = 0.8),
+            vjust = -0.3, size = 4, fontface = "bold") +
+  scale_fill_viridis_d(option = "D") +
+  labs(title = "Age Distribution of Survey vs Census (Absolute Numbers)",
+       x = "",
+       y = "Number of People",
+       fill = "Data Source") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12, face = "bold"),
+        plot.title = element_text(size = 14, face = "bold"),
+        axis.title.y = element_text(size = 12, face = "bold"),
+        axis.text.y = element_text(size = 12, face = "bold"),
+        legend.title = element_text(size = 12, face = "bold"),
+        legend.text = element_text(size = 10),
+        plot.margin = margin(1, 1, 2, 1, "lines"))
 
-#################################################3
+ggsave(here("figures","AgeDistribution_SurveyCensusAbs.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
+
+# plot the age distribution alongside the census age distribution
+# RELATIVE values (proportions) 
+
+# Reshape and calculate proportions
+SurveyAgeDist_long <- SurveyAgeDist.df %>%
+  pivot_longer(cols = c(SurveyAges, CensusAges),
+               names_to = "Source",
+               values_to = "Count") %>%
+  group_by(Source) %>%
+  mutate(Proportion = Count / sum(Count))
+
+# Plot proportions
+plot <- ggplot(SurveyAgeDist_long, aes(x = SurveyAgeBins, y = Proportion, fill = Source)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
+  geom_text(aes(label = scales::percent(Proportion, accuracy = 1)),
+            position = position_dodge(width = 0.8),
+            vjust = -0.3, size = 4, fontface = "bold") +
+  scale_fill_viridis_d(option = "D") +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(title = "Age Distribution as Proportion of Total",
+       x = "",
+       y = "Proportion",
+       fill = "Data Source") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12, face = "bold"),
+        plot.title = element_text(size = 16, face = "bold"),
+        axis.title.y = element_text(size = 14, face = "bold"),
+        axis.text.y = element_text(size = 12, face = "bold"),
+        legend.title = element_text(size = 12, face = "bold"),
+        legend.text = element_text(size = 11),
+        plot.margin = margin(1, 1, 2, 1, "lines"))
+
+ggsave(here("figures","AgeDistribution_SurveyCensusProportions.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
+
+#################################################
 # sum all age categories
 TotalPeople <- rowSums(Q3.dat[, c("Under7", "Age7_12", "Age13_18",
         "Age19_34","Age35_54", "Age55_64", "Age65_74", "Age75_older")],na.rm = TRUE)
@@ -257,7 +225,7 @@ Q3.dat <- data.frame(Q3.dat,TotalPeople)
 #rename PT inside city limits row
 Q3.dat <- Q3.dat %>%
   mutate(City.area = recode(City.area, 
-                            "Port Townsend (outside the city limits)" = "Port Townsend (outside city limits)"))
+  "Port Townsend (outside the city limits)" = "Port Townsend (outside city limits)"))
 
 
 # Count the occurrences of each unique 'City.area' (represents population of respondants only)
@@ -276,6 +244,7 @@ city_area_total <- Q3.dat %>%
       rename(Count=Total)
 
 survey_proportion_total <- round(city_area_total$Count/sum(city_area_total$Count),3)
+
 census_proportion <- round(census2020.dat$Count/sum(census2020.dat$Count),3)
 proportion <- c(survey_proportion_resp,survey_proportion_total,census_proportion)
 

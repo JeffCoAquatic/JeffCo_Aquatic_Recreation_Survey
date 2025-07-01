@@ -384,19 +384,13 @@ ResidentSurvey.dat <- ResidentSurvey.dat %>%
   mutate(City.area = ifelse(!is.na(city.area.revised), city.area.revised, City.area)) %>%
   select(-city.area.revised) 
 
+# Remove City.area submissions flagged as REMOVE; 
+# these were listed under 'Other' category but were locations outside of Jefferson County
+# 2 - Forks and 1 - Sequim
+
+ResidentSurvey.dat <- filter(ResidentSurvey.dat, City.area != "REMOVE")
+NafterNonJeffCoResp <- dim(ResidentSurvey.dat)[1]
+
 write.csv(ResidentSurvey.dat,file="JAC_Survey_3.31.25_CLEAN.csv")
 
-# Create summary table of changes to data
-
-DataSummary <- matrix(NA,)
-
-SampSizeRawData
-SampSizeResident
-SampSizeResPartial 
-SampSizeResComplete 
-NPartialRemoved 
-ResidentSurvey.dat 
-SampSizeResPartRemoved 
-IPEntriesRemoved 
-SampSizeAfterIPRemoval 
 
