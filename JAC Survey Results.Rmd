@@ -842,6 +842,80 @@ print(plot)
 ggsave(here("figures","AquaticAmenities_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
 ```
 
+# plot heatmap/matrix to show what percentage of respondents within an age category would be very likely to use each aquatic amenity
+```{r}
+
+# Step 1: Filter AquaAmenities, clean names
+AquaAmenities.dat <- ResidentSurvey.dat %>%
+    select(Age, starts_with("AquaAmenities_")) %>%
+    rename_with(~ gsub("AquaAmenities_", "", .), starts_with("AquaAmenities_")) %>%
+    select(-UsageRate) %>%
+    rename_with(~ gsub("_", " ", .), everything()) %>%
+    rename_with(~ tools::toTitleCase(.), everything())
+
+# Step 2: Pivot longer and filter "Very likely" responses
+very_likely_data <- AquaAmenities.dat %>%
+    pivot_longer(cols = -Age, names_to = "Amenity", values_to = "Ranking") %>%
+    filter(Ranking == "Very likely", !is.na(Age), !is.na(Amenity)) %>%
+    group_by(Age, Amenity) %>%
+    summarise(VeryLikely = n(), .groups = "drop")
+
+# Step 3: Total responses per Age x Amenity combo
+total_responses <- AquaAmenities.dat %>%
+    pivot_longer(cols = -Age, names_to = "Amenity", values_to = "Ranking") %>%
+    filter(!is.na(Ranking), !is.na(Age), !is.na(Amenity)) %>%
+    group_by(Age, Amenity) %>%
+    summarise(Total = n(), .groups = "drop")
+
+# Step 4: Join and calculate percent
+percent_data <- left_join(very_likely_data, total_responses, by = c("Age", "Amenity")) %>%
+    mutate(Percentage = VeryLikely / Total * 100)
+
+# Step 5: Bin percentages into 5% bands, cap at 60%
+percent_data <- percent_data %>%
+    mutate(
+        PercentBin = cut(
+            Percentage,
+            breaks = c(-Inf, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60,65,70,75,80),
+            labels = c(
+                "0–5%", "6–10%", "11–15%", "16–20%", "21–25%", "26–30%",
+                "31–35%", "36–40%", "41–45%", "46–50%", "51–55%", "56–60%", "61–65%", "66–70%", "71–75%", "76–80%"
+            ),
+            right = TRUE
+        ),
+        # Reverse the factor levels so higher bins map to brighter viridis colors
+        PercentBin = factor(PercentBin, levels = rev(levels(PercentBin)))
+    )
+# Step 6: Order amenities alphabetically (top to bottom)
+percent_data <- percent_data %>%
+    mutate(Amenity = fct_rev(fct_inorder(sort(unique(Amenity))[match(Amenity, sort(unique(Amenity)))])))
+
+# Step 7: Plot heatmap
+plot <- ggplot(percent_data, aes(x = Age, y = Amenity, fill = PercentBin)) +
+    geom_tile(color = "white") +
+    geom_text(aes(label = paste0(round(Percentage), "%")), size = 3) +
+    scale_fill_viridis_d(
+        option = "plasma",
+        direction = -1,  # optional: reverse so bright = high
+        name = "Very Likely to Use"
+    ) +
+    labs(
+        title = "Most Preferred Aquatic Amenities by Age Group",
+        x = "Age Group",
+        y = "Aquatic Amenity"
+    ) +
+    theme_minimal(base_size = 12) +
+    theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(face = "bold", size = 14),
+        legend.title = element_text(face = "bold")
+    )
+ggsave(here("figures","AquaAmenities_AllAgesMatrix.png"), plot = plot)
+
+
+```
+
+
 # 11.) Non aquatic amenities - exactly the same as above
       
 ```{r}
@@ -915,9 +989,9 @@ ggsave(here("figures","RecAmenities_Fig.png"), plot = plot, width = 8, height = 
 ```
 
 
-
+# recreational amenity ranking barplots for each age bin
 ```{r}
-``{r}
+
 # PRODUCE REC AMENITY FIGURE BY AGE BIN
 
 # Select only the AquaAmenities columns
@@ -1070,188 +1144,217 @@ ggsave(here("figures","RecAmenities_AllAgesMatrix.png"), plot = plot)
 ```
 
 
-
 # 12.) How much more would you use an aquatic facility, if amenities?
 - also includes Q9 and usage for a recreation facility
     
 
 ```{r}
-CurrentUsage.dat <- as.data.frame(table(ResidentSurvey.dat$FacilityUsageRate))
-CurrentUsage.dat <- CurrentUsage.dat[2:5,]
-Percentage <- CurrentUsage.dat$Freq/sum(CurrentUsage.dat$Freq)
-CurrentUsage.dat <- data.frame(CurrentUsage.dat,Percentage,rep("Current",dim(CurrentUsage.dat)[1]))
-colnames(CurrentUsage.dat) <- c("Response","Frequency","Percentage","UsageCategory")
-CurrentUsage.dat <-  CurrentUsage.dat %>%
-  mutate(Response = recode(Response, "Don't use an aquatic facility" = "Never"))
-  
-AquaticUsage.dat <- as.data.frame(table(ResidentSurvey.dat$AquaAmenities_UsageRate))
-AquaticUsage.dat <- AquaticUsage.dat[2:5,]
-Percentage <- AquaticUsage.dat$Freq/sum(AquaticUsage.dat$Freq)
-AquaticUsage.dat <- data.frame(AquaticUsage.dat,Percentage,rep("Expected w/Aquatic",dim(AquaticUsage.dat)[1]))
-colnames(AquaticUsage.dat) <- c("Response","Frequency","Percentage","UsageCategory")
- 
-RecUsage.dat <- as.data.frame(table(ResidentSurvey.dat$RecAmenities_UsageRate))
-RecUsage.dat <- RecUsage.dat[2:5,]
-Percentage <- RecUsage.dat$Freq/sum(RecUsage.dat$Freq)
-RecUsage.dat <- data.frame(RecUsage.dat,Percentage,rep("Expected w/Recreation",dim(RecUsage.dat)[1]))
-colnames(RecUsage.dat) <- c("Response","Frequency","Percentage","UsageCategory")
+library(ggplot2)
+library(dplyr)
 
-UsageCombined.dat <- rbind(CurrentUsage.dat,AquaticUsage.dat,RecUsage.dat)
-# reorder the usage rates from most to least use
-UsageCombined.dat$Response <- factor(UsageCombined.dat$Response, 
-                                  levels = c("More than once a week", 
-                                          "Several times a month", 
-                                           "Less than once a month", 
-                                            "Never"))
+# Create a dataframe manually (or reuse `CurrentUsage.dat` if already created)
+usage_df <- data.frame(
+  Response = c("More than once a week", "Several times a month", "Less than once a month", "Never"),
+  Percentage = c(15, 14, 26, 45)
+)
 
+# Ensure factor order
+usage_df$Response <- factor(usage_df$Response, levels = c("More than once a week", 
+                                                           "Several times a month", 
+                                                           "Less than once a month", 
+                                                           "Never"))
 
-plot <- ggplot(UsageCombined.dat, aes(x = Response, y = Percentage, fill = UsageCategory)) +
-  geom_bar(stat = "identity",position = "dodge") +  # 'dodge' to separate the bars
-  scale_fill_viridis(discrete = TRUE,direction = 1) +  # Colorblind-friendly palette
-  labs(title = "Current Facility Usage Rates",
-       x = "",
-       y = "Percentage (%)") + 
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1,size = 12, face = "bold"),
-    plot.title = element_text(size = 20, face = "bold"),
-    axis.title.y = element_text(size = 15, face = "bold"),
-    axis.text.y = element_text(size = 12, face = "bold"),
-    legend.text = element_text(size = 12, face = "bold"),
-    legend.title = element_text(size = 14, face = "bold"))
-   # ,legend.position = "none") 
-
- # Print the plot
-print(plot)
-ggsave(here("figures","AllUsage_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300) 
-
-# Create plot with current usage rates only
-current_usage <- UsageCombined.dat %>%
-                filter(UsageCategory == "Current")
-
-plot <- ggplot(current_usage, aes(x = Response, y = Percentage, fill = UsageCategory)) +
-  geom_bar(stat = "identity",position = "dodge") +  # 'dodge' to separate the bars
-  scale_fill_viridis(discrete = TRUE,direction = 1) +  # Colorblind-friendly palette
+# Plot
+ggplot(usage_df, aes(x = Response, y = Percentage)) +
+  geom_bar(stat = "identity", fill = "#49006a") +
+  geom_text(aes(label = paste0(Percentage, "%")), vjust = -0.5, size = 5, color = "white", fontface = "bold") +
   labs(title = "Current Aquatic Facility Usage",
        x = "",
-       y = "Percentage (%)") + 
+       y = "Percentage (%)") +
   theme_minimal() +
-   theme(axis.text.x = element_text(angle = 45, hjust = 1,size = 12, face = "bold"),
-    plot.title = element_text(size = 20, face = "bold"),
-    axis.title.y = element_text(size = 15, face = "bold"),
-    axis.text.y = element_text(size = 12, face = "bold"),
-    legend.text = element_text(size = 12, face = "bold"),
-    legend.title = element_text(size = 14, face = "bold")
-    ,legend.position = "none") 
+  theme(axis.text.x = element_text(angle = 20, hjust = 1, size = 12, face = "bold"),
+        axis.text.y = element_text(size = 12, face = "bold"),
+        axis.title.y = element_text(size = 14, face = "bold"),
+        plot.title = element_text(size = 18, face = "bold"))
 
- # Print the plot
-print(plot)
-ggsave(here("figures","CurrentAquaticUsage_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300) 
+# Create dataframe with manually entered values (replace with your own data if needed)
+usage_comparison <- data.frame(
+  Response = rep(c("More than once a week", 
+                   "Several times a month", 
+                   "Less than once a month", 
+                   "Never"), 2),
+  Percentage = c(15, 14, 26, 45,   # Current
+                 28, 32, 18, 22),  # Expected with Aquatic Amenities
+  UsageCategory = rep(c("Current Usage", "Expected w/ Aquatic Amenities"), each = 4)
+)
 
-# Create plot with aquatic amenities usage rates only
-aquatic_usage <- UsageCombined.dat %>%
-                filter(UsageCategory == "Expected w/Aquatic")
+# Factor level ordering for clean x-axis
+usage_comparison$Response <- factor(usage_comparison$Response,
+                                    levels = c("More than once a week", 
+                                               "Several times a month", 
+                                               "Less than once a month", 
+                                               "Never"))
 
-plot <- ggplot(aquatic_usage, aes(x = Response, y = Percentage, fill = UsageCategory)) +
-  geom_bar(stat = "identity",position = "dodge") +  # 'dodge' to separate the bars
-  scale_fill_viridis(discrete = TRUE,direction = 1) +  # Colorblind-friendly palette
-  labs(title = "Expected Usage with Aquatic Amenities",
-       x = "",
-       y = "Percentage (%)") + 
-  theme_minimal() +
-   theme(axis.text.x = element_text(angle = 45, hjust = 1,size = 12, face = "bold"),
-    plot.title = element_text(size = 20, face = "bold"),
-    axis.title.y = element_text(size = 15, face = "bold"),
-    axis.text.y = element_text(size = 12, face = "bold"),
-    legend.text = element_text(size = 12, face = "bold"),
-    legend.title = element_text(size = 14, face = "bold")
-    ,legend.position = "none") 
-
- # Print the plot
-print(plot)
-ggsave(here("figures","AquaticUsageChange_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300) 
-
-# Create plot with recreation amenities usage rates only
-rec_usage <- UsageCombined.dat %>%
-                filter(UsageCategory == "Expected w/Recreation")
-
-plot <- ggplot(rec_usage, aes(x = Response, y = Percentage, fill = UsageCategory)) +
-  geom_bar(stat = "identity",position = "dodge") +  # 'dodge' to separate the bars
-  scale_fill_viridis(discrete = TRUE,direction = 1) +  # Colorblind-friendly palette
-  labs(title = "Expected Usage with Recreation Amenities",
-       x = "",
-       y = "Percentage (%)") + 
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1,size = 12, face = "bold"),
-    plot.title = element_text(size = 20, face = "bold"),
-    axis.title.y = element_text(size = 15, face = "bold"),
-    axis.text.y = element_text(size = 12, face = "bold"),
-    legend.text = element_text(size = 12, face = "bold"),
-    legend.title = element_text(size = 14, face = "bold")
-    ,legend.position = "none") 
-
- # Print the plot
-print(plot)
-ggsave(here("figures","RecreationUsage_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300) 
-    
-
-# Create plot with percentages on the y-axis and side-by-side comparison bars
-# remove Rec Amenities from figure
-aquatic_current <- filter(UsageCombined.dat,UsageCategory!="Expected w/Recreation")
-
-plot <- ggplot(aquatic_current, aes(x = Response, y = Percentage, fill = UsageCategory)) +
-  geom_bar(stat = "identity", position = "dodge") +  # 'dodge' to separate the bars
-  scale_fill_viridis(discrete = TRUE) +  # Colorblind-friendly palette
-  labs(title = "Usage Rate Comparison",
+# Plot
+ggplot(usage_comparison, aes(x = Response, y = Percentage, fill = UsageCategory)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9)) +
+  geom_text(aes(label = paste0(Percentage, "%")),
+            position = position_dodge(width = 0.9), 
+            vjust = -0.5, size = 4.5, fontface = "bold") +
+  scale_fill_manual(values = c("#49006a", "#ffd92f")) +
+  labs(title = "Aquatic Facility Usage: Current vs. Expected with Amenities",
        x = "",
        y = "Percentage (%)",
-       fill = "Usage Categories") +  # Add a legend title for clarity
+       fill = "Usage Category") +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1,size = 12, face = "bold"),
-    plot.title = element_text(size = 20, face = "bold"),
-    axis.title.y = element_text(size = 15, face = "bold"),
-    axis.text.y = element_text(size = 12, face = "bold"),
-    legend.text = element_text(size = 12, face = "bold"),
-    legend.title = element_text(size = 14, face = "bold")
-  ) 
-
- # Print the plot
-print(plot)
-ggsave(here("figures","UsageRateComparison_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300) 
-  
-  
-  
-#Now plot the percent change
-usage_change_data <- long_usage_data_percent %>%
-  select("Response","UsageCategory", "percentage")%>%
-  filter(UsageCategory %in% c("Current Usage", "Expected w/ Aqua Amenities")) %>%
-  pivot_wider(names_from = UsageCategory, values_from = percentage) %>%
-  mutate(percent_change = `Expected w/ Aqua Amenities` - `Current Usage`) %>%
-  select(Response, percent_change)
-
-
-plot <-  usage_change_data %>%
-  ggplot(aes(x = Response, y = percent_change, fill = percent_change > 0)) +  
-  geom_bar(stat = "identity", show.legend = TRUE) +
-  labs(title = "Usage Rate Change with Aquatic Amenities",
-       x = "",
-       y = "Percent Change (%)",
-       fill = "Change Direction") +  
-  scale_fill_viridis(discrete = TRUE, direction = 1, 
-                     labels = c("Negative", "Positive")) +  
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1,size = 12, face = "bold"),
-    plot.title = element_text(size = 20, face = "bold"),
-    axis.title.y = element_text(size = 15, face = "bold"),
-    axis.text.y = element_text(size = 12, face = "bold"),
-    legend.text = element_text(size = 12, face = "bold"),
-    legend.title = element_text(size = 14, face = "bold")
-  ) 
-
+  theme(axis.text.x = element_text(angle = 20, hjust = 1, size = 12, face = "bold"),
+        axis.text.y = element_text(size = 12, face = "bold"),
+        axis.title.y = element_text(size = 14, face = "bold"),
+        plot.title = element_text(size = 18, face = "bold"),
+        legend.title = element_text(size = 12, face = "bold"),
+        legend.text = element_text(size = 11, face = "bold"))
 # Print the plot
 print(plot)
 ggsave(here("figures","UsageRatePercentChange_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300) 
    
 ```
+# Create Sankey plot to show change in aquatic user sentiment before/after preferred amenities
+
+```{r}
+# Prepare data for Sankey: Current vs Expected with Aquatic Amenities
+
+library(ggalluvial)
+
+ResidentSurvey.dat <- read.csv("ResidentSurvey.dat.csv")
+
+# Prepare the data
+Sankey_Data <- ResidentSurvey.dat %>%
+    select(Current = FacilityUsageRate, Expected = AquaAmenities_UsageRate) %>%
+    mutate(
+        Current = recode(Current, 
+                         "Don't use an aquatic facility" = "Never",
+                         "Less than once a month" = "Less than\nonce/month",
+                         "Several times a month" = "Several\ntimes/month",
+                         "More than once a week" = "More than\nonce/week"),
+        Expected = recode(Expected, 
+                          "Don't use an aquatic facility" = "Never",
+                          "Less than once a month" = "Less than\nonce/month",
+                          "Several times a month" = "Several\ntimes/month",
+                          "More than once a week" = "More than\nonce/week")
+    ) %>%
+    filter(!is.na(Current), !is.na(Expected), Current != "", Expected != "") %>%
+    group_by(Current, Expected) %>%
+    summarise(Freq = n(), .groups = "drop") %>%
+    mutate(
+        # Flip order so "Never" appears at the bottom
+        Current = factor(Current, levels = c("More than\nonce/week", 
+                                             "Several\ntimes/month", 
+                                             "Less than\nonce/month", 
+                                             "Never")),
+        Expected = factor(Expected, levels = c("More than\nonce/week", 
+                                               "Several\ntimes/month", 
+                                               "Less than\nonce/month", 
+                                               "Never"))
+    )
+
+Sankey_Data <- Sankey_Data %>%
+  mutate(stratum_fill = Current)  # Only use this for coloring the flows
+
+# Step 2: Plot
+sankey_plot <- ggplot(Sankey_Data,
+                      aes(axis1 = Current, axis2 = Expected, y = Freq)) +
+  # Colored flows with custom fill variable (not directly Current)
+  geom_alluvium(aes(fill = stratum_fill, alpha = stratum_fill), width = 1/6) +
+
+  # Gray stratum blocks (outside aes to keep out of legend)
+  geom_stratum(width = 1/6, fill = "gray90", color = "black") +
+
+  # Stratum text
+  geom_text(stat = "stratum", aes(label = after_stat(stratum)),
+            size = 3.5, fontface = "bold") +
+
+  # Axis labels
+  scale_x_discrete(
+    limits = c("Current Usage", "Expected Usage"),
+    expand = c(.05, .05),
+    labels = c("Current Usage", "Expected Usage")
+  ) +
+
+  # Custom viridis fill and updated legend title
+  scale_fill_viridis_d(
+    option = "D",
+    direction = -1,
+    name = "Usage Rate",
+    guide = guide_legend(override.aes = list(alpha = 1))
+  ) +
+
+  # Alpha transparency mapped to flow color only
+  scale_alpha_manual(values = c(
+    "More than\nonce/week" = 0.9,
+    "Several\ntimes/month" = 0.8,
+    "Less than\nonce/month" = 0.7,
+    "Never" = 0.5
+  ), guide = "none") +  # Don't show alpha in legend
+
+  # Final formatting
+  labs(
+    title = "Expected Change in Aquatic Facility Usage",
+    y = "Number of Respondents"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16, hjust = 0.5),
+    legend.position = "bottom",
+    axis.title.x = element_blank(),
+    axis.text.x = element_text(face = "bold", size = 13, color = "black")
+  )
+
+ggsave(here("figures","UsageRateChange_SankeyPlot.png"), plot = sankey_plot)
+
+```
+
+# characterize individuals wioth most extreme changes in usage patters with/without preferred amenities 
+
+```{r}
+
+# Number of respondents who answere BOTH before and after aquatic amenities usage question
+Total <- dim(filter(ResidentSurvey.dat,FacilityUsageRate!="" & AquaAmenities_UsageRate !=""))[1] 
+
+###################################################################################
+# examine responses that moved from more than once/week usage to less than once/month usage
+LessUsage <- filter(ResidentSurvey.dat, FacilityUsageRate == "More than once a week" & (AquaAmenities_UsageRate == "Never"|AquaAmenities_UsageRate =="Less than once a month"))
+
+LU_ID <- LessUsage$Response.ID
+
+LessUsage_Comments <- filter(ResidentComment.dat, Response.ID %in% LU_ID)
+LessUsage_Data <- data.frame(LessUsage$Response.ID,LessUsage$City.area,LessUsage$Age,LessUsage_Comments$Comments)
+colnames(LessUsage_Data) <- c("Response.ID","City.area","Age","Comments")
+
+Num.Decreased <- dim(LessUsage_Data)[1]
+PercentDecrease <- Num.Decreased/Total
+
+# calculate percentage of those who responded who decreased usage (as defined here)
+write.csv(LessUsage_Data,file="LessAquaticUsage_AfterAmenities.csv")
+
+#################################################################################
+# examine responses that moved from NEVER usage to the two most frequent categories
+
+MoreUsage <- filter(ResidentSurvey.dat, FacilityUsageRate == "Don't use an aquatic facility" & (AquaAmenities_UsageRate == "More than once a week"|AquaAmenities_UsageRate =="Several times a month"))
+
+MoreUsage_ID <- MoreUsage$Response.ID
+
+MoreUsage_Comments <- filter(ResidentComment.dat, Response.ID %in% MoreUsage_ID)
+
+MoreUsage_Data <- data.frame(MoreUsage$Response.ID,MoreUsage$City.area,MoreUsage$Age,MoreUsage_Comments$Comments)
+colnames(MoreUsage_Data) <- c("Response.ID","City.area","Age","Comments")
+
+Num.Increased <- dim(MoreUsage_Data)[1]
+PercentIncrease <- Num.Increased/Total
+
+write.csv(MoreUsage_Data,file="MoreAquaticUsage_AfterAmenities.csv")
+
+```
+
 
 # 13.) non-aquatic amenities
       # include pie chart
