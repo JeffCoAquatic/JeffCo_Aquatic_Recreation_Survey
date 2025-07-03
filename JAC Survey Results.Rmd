@@ -234,10 +234,10 @@ ggsave(here("figures","Census_Survey_Area_Fig_Over18.png"), plot = plot, width =
 
 
 ```{r}
-# create demographic figures
+# Q3 - what is your age?
 
 # drop ambiguous entries for this question only
-Q3.dat <- filter(ResidentSurvey.dat, City.area != "") # removes 10 responses where individuals put multiple locations under city/area of residence or simply put 'olympic peninsula'
+Q3.dat <- ResidentSurvey.dat
 
 # calculate individuals by age category
 Under_7 <- sum(Q3.dat$Under7,na.rm=TRUE)
@@ -408,95 +408,73 @@ webshot(here::here("tables", "City_Area_Table.html"), here::here("tables", "City
 ```
 
 # 4.) What is your age?
-        TO DO LIST
-        # - re-do as bar plot (percentage - scale to 100)
-        # - table of column sums across age groups, county-wide - include data on age distribution from census data
-        # require some manual review/edits - adjust non-numeric entries
-        # also include a figure that displays ALL of the people in a household
-        # SWITCH TO 2024 ESTIMATE Data
+
 ```{r}
-# 
-# read-in Age Census Data and summarize to align with survey age bins
-age_census <- read.csv(here("data","AquaticsSurveyAgeGroup_AllData.csv"))
+# Q4: What is your age? question
 
-# Summarize age census data based on these bins
-age_summary <- data.frame(
-  Age = c("15-19","18-34*", "35-54", "55-64", "65-74", "75+"),
-  Census_2020 = c(sum(age_census$X2020.Census[age_census$Age.Group %in% c("15_19")]),
-                   sum(age_census$X2020.Census[age_census$Age.Group %in% c("18_24", "25_29", "30_34")]), 
-                   sum(age_census$X2020.Census[age_census$Age.Group %in% c("35_39", "40_44", "45_49", "50_54")]), 
-                   sum(age_census$X2020.Census[age_census$Age.Group %in% c("55_59", "60_64")]), 
-                   sum(age_census$X2020.Census[age_census$Age.Group %in% c("65_69", "70_74")]), 
-                   sum(age_census$X2020.Census[age_census$Age.Group %in% c("75_79", "80_84", "85+")])
-  ),
-  OFM.Est_2024 = c(sum(age_census$X2024.OFM.Estimate[age_census$Age.Group %in% c("15_19")]), 
-                    sum(age_census$X2024.OFM.Estimate[age_census$Age.Group %in% c("18_24", "25_29", "30_34")]),
-                    sum(age_census$X2024.OFM.Estimate[age_census$Age.Group %in% c("35_39", "40_44", "45_49", "50_54")]), 
-                    sum(age_census$X2024.OFM.Estimate[age_census$Age.Group %in% c("55_59", "60_64")]), 
-                    sum(age_census$X2024.OFM.Estimate[age_census$Age.Group %in% c("65_69", "70_74")]), 
-                    sum(age_census$X2024.OFM.Estimate[age_census$Age.Group %in% c("75_79", "80_84", "85+")])
+Q4.dat <- filter(ResidentSurvey.dat, Age != "")
+
+# Summarize Age Census Data and summarize to align with survey age bins
+CensusAgeTotals <- Census.dat %>%
+  summarise(
+    Under_7 = sum(Under_7, na.rm = TRUE),
+    Age_7_12 = sum(Age_7_12, na.rm = TRUE),
+    Age_13_18 = sum(Age_13_18, na.rm = TRUE),
+    Age_19_34 = sum(Age_19_34, na.rm = TRUE),
+    Age_35_54 = sum(Age_35_54, na.rm = TRUE),
+    Age_55_64 = sum(Age_55_64, na.rm = TRUE),
+    Age_65_74 = sum(Age_65_74, na.rm = TRUE),
+    Age_75_plus = sum(Age_75_plus, na.rm = TRUE)
   )
-)
 
-# summarise and format age distribution data
-
-# drop the blank entries
-Age.dat <- filter(ResidentSurvey.dat, Age != "")
 
 # Count the occurrences of each unique 'City.area'
 age_counts <- as.data.frame(table(ResidentSurvey.dat$Age))
 colnames(age_counts) <- c("Age", "Respondents")
-age_counts <- age_counts %>%
+
+survey_age_counts <- age_counts %>%
  mutate(Age = as.character(Age),  # Convert to character
-         Age = ifelse(Age == "18-34", "18-34*", Age))  # Modify the specific row
+        Age = ifelse(Age == "18-34", "18-34*", Age))%>%  # Modify the specific row
+        mutate(Proportion = Respondents/sum(Respondents))%>%
+        mutate(DataSource = "Survey")
 
-# add columns of census data, and row where categories don't overlap perfectly
-data <- age_counts %>%
-          merge(age_summary, by = "Age")%>%
-          #calculate proprtions by category
-          mutate(Survey = round(Respondents/sum(Respondents),digits = 2))%>%
-          mutate(Census = round(Census_2020/sum(Census_2020),digits=2))%>%
-          mutate(CensusProportion_2024 = round(OFM.Est_2024/sum(OFM.Est_2024),digits=2))%>%
-          #drop 2024 OFM estimates for simplicity?
-          select(Age,Respondents,Census_2020,Survey,Census)
+# reformat census age distribution data
+census_totals <- c(CensusAgeTotals$Age_19_34,CensusAgeTotals$Age_35_54,CensusAgeTotals$Age_55_64,CensusAgeTotals$Age_65_74,CensusAgeTotals$Age_75_plus)
 
-```
-        
-```{r}
-# creates figure
-library(tidyr)
-# Create a bar plot with a colorblind-friendly palette
-data_long <- data %>%
-  pivot_longer(cols = c(Survey, Census),
-               names_to = "DataSource", 
-               values_to = "Proportion")
-               
-# Create the plot
-plot <- ggplot(data_long, aes(x = Age, y = Proportion, fill = DataSource)) +
+census_age_counts <- data.frame(survey_age_counts$Age, census_totals)
+
+census_age_counts <- census_age_counts %>%
+    rename(Age = survey_age_counts.Age) %>%
+    rename(Respondents = census_totals) %>%
+    mutate(Proportion = Respondents/sum(Respondents))%>%
+    mutate(DataSource = "Census")
+
+survey_census_ages <- rbind(census_age_counts,survey_age_counts)
+
+#create barplot comparing survey and census age distribution (of respondents)
+plot <- ggplot(survey_census_ages, aes(x = Age, y = Proportion, fill = DataSource)) +
   geom_bar(stat = "identity", position = "dodge") +  # Dodge to separate the bars
   scale_fill_viridis(discrete = TRUE) +  # Colorblind-friendly palette
-  labs(title = "Survey Responses vs 2020 Census Data by Age Range",
+  labs(title = "Respondent Age vs Census Distribution",
        x = "",
        y = "Age Distribution (%)",
        fill = "Data Source") +  # Add a legend title for clarity
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1,size = 12, face = "bold"),
-    plot.title = element_text(size = 20, face = "bold"),
-    axis.title.y = element_text(size = 15, face = "bold"),
+    plot.title = element_text(size = 16, face = "bold"),
+    axis.title.y = element_text(size = 14, face = "bold"),
     axis.text.y = element_text(size = 12, face = "bold"),
     legend.text = element_text(size = 12, face = "bold"),
     legend.title = element_text(size = 14, face = "bold")
     )
     
-# Print the plot
-print(plot)
-
 # save figure with fixed dimensions to standardize w/others
 ggsave(here("figures","Age_Distribution_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
 
+
 ```
         
-        
+
 ```{r}
 
 # create a table using gt package
@@ -607,7 +585,7 @@ ggsave(here("figures","PoolImportance_Fig.png"), plot = plot, width = 8, height 
 ```{r}
 # summarize the data
 library(reshape2)
-Q6.dat <- ResidentSurvey.dat[,16:47]
+Q6.dat <- ResidentSurvey.dat[,22:53]
 Q6.dat <- colSums(Q6.dat,na.rm=TRUE)
 
 # Reshape the data from wide to long format
@@ -618,50 +596,23 @@ long.data <- melt(Q6.dat)
 AgeAbility.dat <- data.frame(AgeAbility,long.data$value)
 
 # need to rename some of the AgeAbility variables so ages can be more easily separated from ability
+library(stringr)
+
 AgeAbility.dat <- AgeAbility.dat %>%
-  mutate(AgeAbility = recode(AgeAbility,
-    "Under7_Non.swimmer" = "Under7_Non.swimmer",
-    "Under7_Beginner" = "Under7_Beginner",
-    "Under7_Intermediate" = "Under7_Intermediate",
-    "Under7_Advanced" = "Under7_Advanced",
-    "7_12_Non.swimmer" = "7.12_Non.swimmer",
-    "7_12_Beginner" = "7.12_Beginner",
-    "7_12_Intermediate" = "7.12_Intermediate",
-    "7_12_Advanced" = "7.12_Advanced",
-    "13_18_Non.swimmer" = "13.18_Non.swimmer",
-    "13_18_Beginner" = "13.18_Beginner",
-    "13_18_Intermediate" = "13.18_Intermediate",
-    "13_18_Advanced" = "13.18_Advanced",
-    "19_34_Non.swimmer" = "19.34_Non.swimmer",
-    "19_34_Beginner" = "19.34_Beginner",
-    "19_34_Intermediate" = "19.34_Intermediate",
-    "19_34_Advanced" = "19.34_Advanced",
-    "35_54_Non.swimmer" = "35.54_Non.swimmer",
-    "35_54_Beginner" = "35.54_Beginner",
-    "35_54_Intermediate" = "35.54_Intermediate",
-    "35_54_Advanced" = "35.54_Advanced",
-    "55_64_Non.swimmer" = "55.64_Non.swimmer",
-    "55_64_Beginner" = "55.64_Beginner",
-    "55_64_Intermediate" = "55.64_Intermediate",
-    "55_64_Advanced" = "55.64_Advanced",
-    "65_74_Non.swimmer" = "65.74_Non.swimmer",
-    "65_74_Beginner" = "65.74_Beginner",
-    "65_74_Intermediate" = "65.74_Intermediate",
-    "65_74_Advanced" = "65.74_Advanced",
-    "75_older_Non.swimmer" = "75.older_Non.swimmer",
-    "75_older_Beginner" = "75.older_Beginner",
-    "75_older_Intermediate" = "75.older_Intermediate",
-    "75_older_Advanced" = "75.older_Advanced"
-  ))
+  mutate(AgeAbility = AgeAbility %>%
+           str_replace_all("7_12", "7.12") %>%
+           str_replace_all("13_18", "13.18") %>%
+           str_replace_all("19_34", "19.34") %>%
+           str_replace_all("35_54", "35.54") %>%
+           str_replace_all("55_64", "55.64") %>%
+           str_replace_all("65_74", "65.74") %>%
+           str_replace_all("75_older", "75.older"))
 
 
 # Split the variable name into AgeGroup and SwimmingAbility
 AgeAbility.df <- AgeAbility.dat %>%
   separate(AgeAbility, into = c("AgeGroup", "SwimmingAbility"), sep = "_") %>%
   rename(Number = long.data.value)
-
-# View the resulting data frame
-head(AgeAbility.df)
 
 # Calculate proportions within each AgeGroup
 AgeAbility.df <- AgeAbility.df %>%
@@ -670,7 +621,7 @@ AgeAbility.df <- AgeAbility.df %>%
 
 # Reorder AgeGroup to ensure "Under7" comes first, followed by "7.12", then the rest
 AgeAbility.df$AgeGroup <- factor(AgeAbility.df$AgeGroup, 
-                                 levels = c("Under7", "7.12","13.18","19.34","35.54","55-64","65.74",    "75.older"))
+                                 levels = c("Under7", "Age7.12","Age13.18","Age19.34","Age35.54","Age55.64","Age65.74", "Age75.older"))
 
 # Reorder SwimmingAbility to ensure 'Non.swimmer' is first, followed by 'Beginner', 'Intermediate', and 'Advanced'
 AgeAbility.df$SwimmingAbility <- factor(AgeAbility.df$SwimmingAbility, 
@@ -682,8 +633,8 @@ plot <- ggplot(AgeAbility.df, aes(x = AgeGroup, y = Proportion, fill = SwimmingA
   scale_fill_viridis(discrete = TRUE) +
   labs(x = "",y = "Proportion", title = "Swimming Ability by Age Group") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1,size = 12, face = "bold"),
-    plot.title = element_text(size = 20, face = "bold"),
-    axis.title.y = element_text(size = 15, face = "bold"),
+    plot.title = element_text(size = 16, face = "bold"),
+    axis.title.y = element_text(size = 14, face = "bold"),
     axis.text.y = element_text(size = 12, face = "bold"),
     legend.text = element_text(size = 12, face = "bold"),
     legend.title = element_text(size = 14, face = "bold")
@@ -962,6 +913,163 @@ ggsave(here("figures","RecAmenities_Fig.png"), plot = plot, width = 8, height = 
 
 
 ```
+
+
+
+```{r}
+``{r}
+# PRODUCE REC AMENITY FIGURE BY AGE BIN
+
+# Select only the AquaAmenities columns
+RecAmenities.dat <- ResidentSurvey.dat %>%
+  filter(Age == "75+")%>%
+  select(starts_with("RecAmenities_")) %>%
+  # Automatically rename columns using gsub to format them
+  rename_with(~ gsub("RecAmenities_", "", .), starts_with("RecAmenities_")) %>%
+  select(-UsageRate)%>%
+  # Replace underscores with spaces and capitalize appropriately
+  rename_with(~ gsub("_", " ", .), everything()) %>%
+  rename_with(~ tools::toTitleCase(.), everything())
+
+# Reshape the data into long format
+long_data <- RecAmenities.dat %>%
+  pivot_longer(cols = everything(), 
+               names_to = "RecAmenity", 
+               values_to = "Ranking")
+               
+# Count the occurrences of each ranking for each amenity
+count_data <- long_data %>%
+  group_by(RecAmenity, Ranking) %>%
+  count() %>%
+  ungroup()
+  
+# remove blank entries
+count_data <- count_data %>%
+  filter(Ranking != "")
+  
+# Calculate the total count for each amenity
+total_counts <- count_data %>%
+  group_by(RecAmenity) %>%
+  summarize(Total = sum(n))
+
+# Join the total counts with the count data
+count_data <- count_data %>%
+  left_join(total_counts, by = "RecAmenity") %>%
+  mutate(Percentage = n / Total * 100)
+
+# Order the data by the percentage of "Very likely" votes
+ordered_amenities <- count_data %>%
+  filter(Ranking == "Very likely") %>%
+  arrange(desc(Percentage)) %>%
+  pull(RecAmenity)
+
+# Plot the stacked bar chart
+plot <- ggplot(count_data, aes(x = factor(RecAmenity, levels = ordered_amenities), 
+                       y = Percentage, 
+                       fill = Ranking)) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_fill_viridis(discrete = TRUE) +  # Use the Viridis color palette for discrete categories
+  labs(title = "Recreation Amenities by Rank, Ages 75+",
+       x = "",
+       y = "Percentage (%)",
+       fill = "Ranking") +
+  theme_minimal() +
+   theme(axis.text.x = element_text(angle = 45, hjust = 1,size = 12, face = "bold"),
+    plot.title = element_text(size = 20, face = "bold"),
+    axis.title.y = element_text(size = 15, face = "bold"),
+    axis.text.y = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 12, face = "bold"),
+    legend.title = element_text(size = 14, face = "bold")
+    )
+  
+ggsave(here("figures","RecAmenities_Age75+_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
+
+
+```
+
+#Produce rec amenities figure to compare across all age bins at once
+
+```{r}
+
+# Step 1: Filter non-aquatic RecAmenities, clean names
+RecAmenities.dat <- ResidentSurvey.dat %>%
+    select(Age, starts_with("RecAmenities_")) %>%
+    rename_with(~ gsub("RecAmenities_", "", .), starts_with("RecAmenities_")) %>%
+    select(-UsageRate) %>%
+    rename_with(~ gsub("_", " ", .), everything()) %>%
+    rename_with(~ tools::toTitleCase(.), everything())
+
+# Step 2: Pivot longer and filter "Very likely" responses
+very_likely_data <- RecAmenities.dat %>%
+    pivot_longer(cols = -Age, names_to = "Amenity", values_to = "Ranking") %>%
+    filter(Ranking == "Very likely", !is.na(Age), !is.na(Amenity)) %>%
+    group_by(Age, Amenity) %>%
+    summarise(VeryLikely = n(), .groups = "drop")
+
+# Step 3: Total responses per Age x Amenity combo
+total_responses <- RecAmenities.dat %>%
+    pivot_longer(cols = -Age, names_to = "Amenity", values_to = "Ranking") %>%
+    filter(!is.na(Ranking), !is.na(Age), !is.na(Amenity)) %>%
+    group_by(Age, Amenity) %>%
+    summarise(Total = n(), .groups = "drop")
+
+# Step 4: Join and calculate percent
+percent_data <- left_join(very_likely_data, total_responses, by = c("Age", "Amenity")) %>%
+    mutate(Percentage = VeryLikely / Total * 100)
+
+# Step 5: Bin percentages into 10% bands, cap at 60%
+percent_data <- percent_data %>%
+    mutate(PercentBin = cut(
+        Percentage,
+        breaks = c(-Inf, 10, 20, 30, 40, 50, 60),
+        labels = c("0–10%", "11–20%", "21–30%", "31–40%", "41–50%", "51–60%"),
+        right = TRUE
+    ))
+# Step 5: Bin percentages into 5% bands, cap at 60%
+percent_data <- percent_data %>%
+    mutate(
+        PercentBin = cut(
+            Percentage,
+            breaks = c(-Inf, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60),
+            labels = c(
+                "0–5%", "6–10%", "11–15%", "16–20%", "21–25%", "26–30%",
+                "31–35%", "36–40%", "41–45%", "46–50%", "51–55%", "56–60%"
+            ),
+            right = TRUE
+        ),
+        # Reverse the factor levels so higher bins map to brighter viridis colors
+        PercentBin = factor(PercentBin, levels = rev(levels(PercentBin)))
+    )
+# Step 6: Order amenities alphabetically (top to bottom)
+percent_data <- percent_data %>%
+    mutate(Amenity = fct_rev(fct_inorder(sort(unique(Amenity))[match(Amenity, sort(unique(Amenity)))])))
+
+# Step 7: Plot heatmap
+plot <- ggplot(percent_data, aes(x = Age, y = Amenity, fill = PercentBin)) +
+    geom_tile(color = "white") +
+    geom_text(aes(label = paste0(round(Percentage), "%")), size = 3) +
+    scale_fill_viridis_d(
+        option = "plasma",
+        direction = -1,  # optional: reverse so bright = high
+        name = "Very Likely to Use"
+    ) +
+    labs(
+        title = "Most Preferred Recreation Amenities by Age Group",
+        x = "Age Group",
+        y = "Recreation Amenity"
+    ) +
+    theme_minimal(base_size = 12) +
+    theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(face = "bold", size = 14),
+        legend.title = element_text(face = "bold")
+    )
+ggsave(here("figures","RecAmenities_AllAgesMatrix.png"), plot = plot)
+
+
+```
+
+
 
 # 12.) How much more would you use an aquatic facility, if amenities?
 - also includes Q9 and usage for a recreation facility
@@ -1263,7 +1371,7 @@ ordered_data <- TaxArea.dat %>%
 ordered_data <- c(ordered_data,"West End")
 
   plot <- TaxArea.dat %>%
-    ggplot(aes(x = factor(City.area, levels = ordered_data),y = count,         fill = TaxSupport)) +
+    ggplot(aes(x = factor(City.area, levels = ordered_data),y = count, fill = TaxSupport)) +
         geom_bar(stat = "identity") +  # Create the stacked bar chart
         scale_fill_viridis(discrete = TRUE) +  
         labs(title = "Tax Support by Area in Numbers",
