@@ -391,7 +391,14 @@ ResidentSurvey.dat <- ResidentSurvey.dat %>%
 # 2 - Forks and 1 - Sequim
 
 ResidentSurvey.dat <- filter(ResidentSurvey.dat, City.area != "REMOVE")
-NafterNonJeffCoResp <- dim(ResidentSurvey.dat)[1]
+NafterNonJeffCoResp <- dim(ResidentSurvey.dat)
+
+## recode how port townsend outside city limits is represented, for consistency 
+ResidentSurvey.dat <- ResidentSurvey.dat %>% 
+  mutate(
+  City.area = ifelse(City.area == "Port Townsend (outside the city limits)", 
+                     "Port Townsend (outside city limits)", 
+                     City.area))
 
 write.csv(ResidentSurvey.dat,file="JAC_Survey_3.31.25_CLEAN.csv")
 
