@@ -22,14 +22,18 @@ library(ggplot2)
 library(here)
 library(viridis)
 library(webshot)
+library(reshape2)
+library(forcats)
 
 ```
+
 
 ## Load QAQC'd data
 
 ```{r}
 source('DataQAQC.R')
 ```
+
 
 # 1.) Summary of responses/what's presented: Include table w/residency status. Total # submissions (include completes and partials), removed non-resident/visitor (include #) surveys for this purpose 
 
@@ -87,6 +91,29 @@ gtsave(table_gt, here::here("tables","SurveyStatusTable.rtf"))
 ```
 
 
+## Summarize household population info and add columns flagging young kids and teenagers in a household
+
+```{r}
+
+# ensure age columns are treated as numeric
+ResidentSurvey.dat <- ResidentSurvey.dat %>%
+  mutate(across(c(Under7, Age7_12, Age13_18, Age19_34, Age35_54, Age55_64, Age65_74, Age75_older), as.numeric))
+
+# Create TotalHousehold column (sum across all age bins)
+ResidentSurvey.dat <- ResidentSurvey.dat %>%
+  mutate(
+    TotalHousehold = rowSums(across(c(Under7, Age7_12, Age13_18, Age19_34, Age35_54, Age55_64, Age65_74, Age75_older)), na.rm = TRUE),
+    
+    # TRUE if any household members are Under 13 (Under7 or Age7_12 > 0)
+    HouseholdUnder13 = (Under7 > 0 | Age7_12 > 0),
+
+    # TRUE if any household members are age 13–18
+    Household13_18 = (Age13_18 > 0)
+  )
+
+```
+
+
 ## Load region and age-specific 2020 census data and create/save summary table
 
 ```{r}
@@ -128,9 +155,9 @@ write.csv(CensusCityAreaSummary,file="CensusCityAreaSummary.csv")
 
 ```
 
-## Creates data columns with Geographic, and Geographic and Area-specific weights
+## Creates data columns with Geographic and Area-specific weights
 ```{r}
-# Weighting responses by Geography, and Geography and Age combined
+# Weighting responses by Geography and Age combined
 
 # Load census data again (enables running this section independently)
 survey_data <- ResidentSurvey.dat
@@ -170,6 +197,56 @@ weights_df <- census_long %>%
 # Join weights back to the survey data
 survey_weighted <- survey_clean %>%
   left_join(weights_df %>% select(City.area, AgeBin, Weight), by = c("City.area", "AgeBin"))
+
+```
+
+## Creates data columns with Geographic and Area-specific weights for those who respondend to the tax question specifically
+
+```{r}
+# Load census data (if not already loaded)
+census_data <- read.csv(here("data", "AgeCensusDataDetailed.csv"))
+
+# Filter survey to only valid TaxSupport responses and complete Age/City.area
+survey_tax <- ResidentSurvey.dat %>%
+  filter(
+    TaxSupport %in% c("Yes", "No", "I don't know/need more information"),
+    !is.na(Age),
+    !is.na(City.area)
+  )
+
+# Map survey Age values to census AgeBin column names
+age_bin_map <- c(
+  "18-34" = "Age_19_34",
+  "35-54" = "Age_35_54",
+  "55-64" = "Age_55_64",
+  "65-74" = "Age_65_74",
+  "75+"   = "Age_75_plus"
+)
+
+survey_tax <- survey_tax %>%
+  mutate(AgeBin = recode(Age, !!!age_bin_map))
+
+# Count tax support respondents by City.area × AgeBin
+survey_tax_counts <- survey_tax %>%
+  group_by(City.area, AgeBin) %>%
+  summarise(SurveyCount = n(), .groups = "drop")
+
+# Reshape census data to long format
+census_long <- census_data %>%
+  pivot_longer(cols = -City.area, names_to = "AgeBin", values_to = "PopulationCount")
+
+# Join census and survey counts, and calculate weights
+tax_weights_df <- census_long %>%
+  left_join(survey_tax_counts, by = c("City.area", "AgeBin")) %>%
+  mutate(
+    SurveyCount = ifelse(is.na(SurveyCount) | SurveyCount == 0, 1, SurveyCount),  # avoid divide-by-zero
+    Weight = PopulationCount / SurveyCount
+  )
+
+# Join weights back to tax-support respondent data only
+survey_tax_weighted <- survey_tax %>%
+  left_join(tax_weights_df %>% select(City.area, AgeBin, Weight), by = c("City.area", "AgeBin"))
+
 
 ```
 
@@ -278,125 +355,10 @@ survey_census_area_over18 <- rbind(survey_area_over18,census_area_over18)
   
 ```
 
-# 3.) - what is your age?
 
-```{r}
-# Q3 - what is your age?
-
-# drop ambiguous entries for this question only
-Q3.dat <- ResidentSurvey.dat
-
-# calculate individuals by age category
-Under_7 <- sum(Q3.dat$Under7,na.rm=TRUE)
-Age_7_12 <- sum(Q3.dat$Age7_12,na.rm=TRUE)
-Age_13_18 <- sum(Q3.dat$Age13_18,na.rm=TRUE)
-Age_19_34 <- sum(Q3.dat$Age19_34,na.rm=TRUE)
-Age_35_54 <- sum(Q3.dat$Age35_54,na.rm=TRUE)
-Age_55_64 <- sum(Q3.dat$Age55_64,na.rm=TRUE)
-Age_65_74 <- sum(Q3.dat$Age65_74,na.rm=TRUE)
-Age_75_older <- sum(Q3.dat$Age75_older,na.rm=TRUE)
-
-SurveyAges <- c(Under_7,Age_7_12,Age_13_18,Age_19_34,Age_35_54,Age_55_64,Age_65_74,Age_75_older)
-
-SurveyAgeBins <- c("Under 7","Age 7-12", "Age 13-18","Age 19-34","Age 35-54","Age 55-64","Age 65-74", "75 and over")
-
-CensusAges <- c(sum(Census.dat$Under_7),sum(Census.dat$Age_7_12),sum(Census.dat$Age_13_18),sum(Census.dat$Age_19_34),sum(Census.dat$Age_35_54),sum(Census.dat$Age_55_64),
-                   sum(Census.dat$Age_65_74),sum(Census.dat$Age_75_plus))
-
-SurveyAgeDist.df <- data.frame(SurveyAgeBins, SurveyAges, CensusAges)
-write.csv(SurveyAgeDist.df,file = "SurveyCensusAgeDistribution.csv")
-
-######################################
-# Ensure correct age order (youngest to oldest)
-SurveyAgeDist.df$SurveyAgeBins <- factor(
-  SurveyAgeDist.df$SurveyAgeBins,
-  levels = c("Under 7", "Age 7-12", "Age 13-18", "Age 19-34",
-             "Age 35-54", "Age 55-64", "Age 65-74", "75 and over")
-)
-# Reshape to long format for plotting
-SurveyAgeDist_long <- SurveyAgeDist.df %>%
-  pivot_longer(cols = c(SurveyAges, CensusAges),
-               names_to = "Source",
-               values_to = "Count")
-
-# Create the bar plot with uniform fill color and without the legend
-plot <- ggplot(SurveyAgeDist.df, aes(x = SurveyAgeBins, y = SurveyAges)) +
-  geom_bar(stat = "identity", position = "dodge", fill = viridis(1)) +  # Use viridis color palette
-  #geom_text(aes(label = Frequency), vjust = -0.3, size = 5, fontface = "bold") +  # Add text labels on top of bars
-  labs(title = "Age Distribution of Surveyed Individuals",
-       x = "",
-       y = "Number of People") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12, face = "bold"),
-        plot.title = element_text(size = 16, face = "bold"),
-        axis.title.y = element_text(size = 14, face = "bold"),
-        axis.text.y = element_text(size = 12, face = "bold"),
-        legend.position = "none",  # Remove the legend
-        plot.margin = margin(1, 1, 2, 1))  # Add margin at the bottom to prevent cutting off labels
-
-ggsave(here("figures","AgeDistribution_AllSurveyIndividuals.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
-
-# plot the age distribution alongside the census age distribution
-# absolute values 
-plot <- ggplot(SurveyAgeDist_long, aes(x = SurveyAgeBins, y = Count, fill = Source)) +
-  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
-  geom_text(aes(label = Count),
-            position = position_dodge(width = 0.8),
-            vjust = -0.3, size = 4, fontface = "bold") +
-  scale_fill_viridis_d(option = "D") +
-  labs(title = "Age Distribution of Survey vs Census (Absolute Numbers)",
-       x = "",
-       y = "Number of People",
-       fill = "Data Source") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12, face = "bold"),
-        plot.title = element_text(size = 14, face = "bold"),
-        axis.title.y = element_text(size = 12, face = "bold"),
-        axis.text.y = element_text(size = 12, face = "bold"),
-        legend.title = element_text(size = 12, face = "bold"),
-        legend.text = element_text(size = 10),
-        plot.margin = margin(1, 1, 2, 1, "lines"))
-
-ggsave(here("figures","AgeDistribution_SurveyCensusAbs.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
-
-# plot the age distribution alongside the census age distribution
-# RELATIVE values (proportions) 
-
-# Reshape and calculate proportions
-SurveyAgeDist_long <- SurveyAgeDist.df %>%
-  pivot_longer(cols = c(SurveyAges, CensusAges),
-               names_to = "Source",
-               values_to = "Count") %>%
-  group_by(Source) %>%
-  mutate(Proportion = Count / sum(Count))
-
-# Plot proportions
-plot <- ggplot(SurveyAgeDist_long, aes(x = SurveyAgeBins, y = Proportion, fill = Source)) +
-  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
-  geom_text(aes(label = scales::percent(Proportion, accuracy = 1)),
-            position = position_dodge(width = 0.8),
-            vjust = -0.3, size = 4, fontface = "bold") +
-  scale_fill_viridis_d(option = "D") +
-  scale_y_continuous(labels = scales::percent_format()) +
-  labs(title = "Age Distribution as Proportion of Total",
-       x = "",
-       y = "Proportion",
-       fill = "Data Source") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12, face = "bold"),
-        plot.title = element_text(size = 16, face = "bold"),
-        axis.title.y = element_text(size = 14, face = "bold"),
-        axis.text.y = element_text(size = 12, face = "bold"),
-        legend.title = element_text(size = 12, face = "bold"),
-        legend.text = element_text(size = 11),
-        plot.margin = margin(1, 1, 2, 1, "lines"))
-
-ggsave(here("figures","AgeDistribution_SurveyCensusProportions.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
-
-#################################################
-```
 
 # creates gt table (formatted)
+
 ```{r}
 # produces table of results
 
@@ -455,7 +417,10 @@ gtsave(table_gt, here::here("tables", "City_Area_Table.html"))
 webshot(here::here("tables", "City_Area_Table.html"), here::here("tables", "City_Area_Table.png"), vwidth = 800, vheight = 600)
 ```
 
+
 # 4.) What is your age?
+
+# create figure of survey age distribution alongside census age distribution, using respondent ages only
 
 ```{r}
 # Q4: What is your age? question
@@ -501,7 +466,7 @@ survey_census_ages <- rbind(census_age_counts,survey_age_counts)
 
 # Add percentage labels
 survey_census_ages <- survey_census_ages %>%
-  mutate(label = paste0(round(Proportion * 100, 1), "%"))
+  mutate(label = paste0(round(Proportion * 100, 0), "%"))
 
 #create barplot comparing survey and census age distribution (of respondents)
 plot <- ggplot(survey_census_ages, aes(x = Age, y = Proportion, fill = DataSource)) +
@@ -509,7 +474,7 @@ plot <- ggplot(survey_census_ages, aes(x = Age, y = Proportion, fill = DataSourc
     geom_text(aes(label = label),
             position = position_dodge(width = 0.9),
             vjust = -0.5,
-            size = 3.5,
+            size = 4,
             fontface = "bold") +
   scale_fill_viridis(discrete = TRUE) +  # Colorblind-friendly palette
   labs(title = "Percent Distribution by Age",
@@ -532,67 +497,153 @@ ggsave(here("figures","Age_Distribution_Fig.png"), plot = plot, width = 8, heigh
 
 
 ```
-        
-#creates gt table (formatted)
+
+# create a figure of survey age distribution alongside census age distribution, using HOUSEHOLD age info
+
 ```{r}
 
-# create a table using gt package
-# Create a styled table with the required bold and grey lines
-table_gt <- data %>%
-  gt() %>%
-  cols_label(
-    Age = "Age",
-    Respondents = "Responses",
-    Census_2020 = "2020 Census",
-    SurveyProportion = "Survey Proportion",
-    CensusProportion = "Census Proportion"
-  ) %>%
-  # Left-justify the Age column data
-  tab_style(
-    style = cell_text(align = "center"),
-    locations = cells_body(columns = c("Age", "Respondents","Census_2020","SurveyProportion","CensusProportion"))
-  ) %>%
-  # Left-justify the "Age" column name
-  tab_style(
-    style = cell_text(align = "center"),
-    locations = cells_column_labels(columns = c("Age", "Respondents","Census_2020","SurveyProportion","CensusProportion"))
-  ) %>%
-  # Make column headers bold
-  tab_style(
-    style = cell_text(weight = "bold"),
-    locations = cells_column_labels(columns = c("Age", "Respondents","Census_2020","SurveyProportion","CensusProportion"))
-  ) %>%
-  # Bold the line above the column headers (top of the table)
-  tab_style(
-    style = cell_borders(sides = "top", weight = 2),
-    locations = cells_column_labels(columns = c("Age", "Respondents","Census_2020","SurveyProportion","CensusProportion"))
-  ) %>%
-  # Bold the line below the column headers (under the header row)
-  tab_style(
-    style = cell_borders(sides = "bottom", weight = 2),
-    locations = cells_column_labels(columns = c("Age", "Respondents","Census_2020","SurveyProportion","CensusProportion"))
-  ) %>%
-  # Bold the bottom line of the table (under the last row of data)
-  tab_style(
-    style = cell_borders(sides = "bottom", weight = 2),
-    locations = cells_body(rows = nrow(data), columns = c("Age", "Respondents","Census_2020","SurveyProportion","CensusProportion"))
-  ) 
+# Summarize Census Age Data to align with survey age bins
+CensusAgeTotals <- Census.dat %>%
+  summarise(
+    Under_7      = sum(Under_7, na.rm = TRUE),
+    Age_7_12     = sum(Age_7_12, na.rm = TRUE),
+    Age_13_18    = sum(Age_13_18, na.rm = TRUE),
+    Age_19_34    = sum(Age_19_34, na.rm = TRUE),
+    Age_35_54    = sum(Age_35_54, na.rm = TRUE),
+    Age_55_64    = sum(Age_55_64, na.rm = TRUE),
+    Age_65_74    = sum(Age_65_74, na.rm = TRUE),
+    Age_75_plus  = sum(Age_75_plus, na.rm = TRUE)
+  )
 
-# Save the table as an HTML file first
-gtsave(table_gt, here::here("tables", "Age_Distribution_Data.html"))
+# Summarize Survey Household Age Data
+survey_age_counts <- ResidentSurvey.dat %>%
+  summarise(
+    `Under 7`  = sum(Under7, na.rm = TRUE),
+    `7–12`     = sum(Age7_12, na.rm = TRUE),
+    `13–18`    = sum(Age13_18, na.rm = TRUE),
+    `19–34`    = sum(Age19_34, na.rm = TRUE),
+    `35–54`    = sum(Age35_54, na.rm = TRUE),
+    `55–64`    = sum(Age55_64, na.rm = TRUE),
+    `65–74`    = sum(Age65_74, na.rm = TRUE),
+    `75+`      = sum(Age75_older, na.rm = TRUE)
+  ) %>%
+  pivot_longer(cols = everything(), names_to = "Age", values_to = "Count") %>%
+  mutate(DataSource = "Survey")
 
-# Convert the HTML table to a PNG file
-webshot(here::here("tables", "Age_Distribution_Data.html"), here::here("tables", "Age_Distribution_Data.png"), vwidth = 800, vheight = 600)
+# Reformat Census Age Data to match survey structure
+census_age_counts <- CensusAgeTotals %>%
+  rename(
+    `Under 7`  = Under_7,
+    `7–12`     = Age_7_12,
+    `13–18`    = Age_13_18,
+    `19–34`    = Age_19_34,
+    `35–54`    = Age_35_54,
+    `55–64`    = Age_55_64,
+    `65–74`    = Age_65_74,
+    `75+`      = Age_75_plus
+  ) %>%
+  pivot_longer(cols = everything(), names_to = "Age", values_to = "Count") %>%
+  mutate(DataSource = "Census")
 
+# Combine both datasets
+age_distribution_df <- bind_rows(survey_age_counts, census_age_counts) %>%
+  group_by(DataSource) %>%
+  mutate(Proportion = Count / sum(Count)) %>%
+  ungroup() %>%
+  mutate(label = paste0(round(Proportion * 100, 0), "%"))
+
+# Ensure age bins are ordered youngest to oldest
+age_labels <- c("Under 7", "7–12", "13–18", "19–34", "35–54", "55–64", "65–74", "75+")
+age_distribution_df$Age <- factor(age_distribution_df$Age, levels = age_labels)
+
+# Create the plot
+plot <- ggplot(age_distribution_df, aes(x = Age, y = Proportion, fill = DataSource)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(label = label),
+            position = position_dodge(width = 0.9),
+            vjust = -0.5,
+            size = 4,
+            fontface = "bold") +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  scale_fill_viridis(discrete = TRUE) +
+  labs(title = "Percent Distribution by Age",
+       subtitle = "Household Data from Survey vs Census",
+       x = "",
+       y = "Population Distribution (%)",
+       fill = "Data Source") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 12, face = "bold"),
+    axis.text.y = element_text(size = 12, face = "bold"),
+    axis.title.y = element_text(size = 14, face = "bold"),
+    plot.title = element_text(size = 16, face = "bold"),
+    plot.subtitle = element_text(size = 14, face = "bold"),
+    legend.text = element_text(size = 12, face = "bold"),
+    legend.title = element_text(size = 14, face = "bold")
+  )
+
+# Save the figure
+ggsave(here("figures", "Age_Distribution_FullHouseholds_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
+
+```
+
+# create figure of respondent age distribution alongside census age distribution
+
+
+#create table summarizing ages represented in survey
+
+```{r}
+# Define age bins
+all_age_cols <- c("Under7", "Age7_12", "Age13_18", "Age19_34", "Age35_54", "Age55_64", "Age65_74", "Age75_older")
+adult_age_cols <- c("Age19_34", "Age35_54", "Age55_64", "Age65_74", "Age75_older")
+
+# Prepare survey data with total household members
+SurveySummary <- ResidentSurvey.dat %>%
+  filter(City.area != "" & !is.na(City.area)) %>%
+  mutate(across(all_of(all_age_cols), as.numeric)) %>%
+  group_by(City.area) %>%
+  summarise(
+    Survey_AllAges = sum(rowSums(across(all_of(all_age_cols)), na.rm = TRUE)),
+    Survey_AdultsOnly = sum(rowSums(across(all_of(adult_age_cols)), na.rm = TRUE)),
+    .groups = "drop"
+  )
+
+# Clean and prepare census data
+CensusSummary <- Census.dat %>%
+  group_by(City.area) %>%
+  summarise(
+    Census_AllAges = sum(CensusTotal, na.rm = TRUE),
+    Census_AdultsOnly = sum(Age_19_34 + Age_35_54 + Age_55_64 + Age_65_74 + Age_75_plus, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Join survey and census summaries
+CombinedSummary <- left_join(CensusSummary, SurveySummary, by = "City.area") %>%
+  mutate(
+    Census_AllAges_Pct = round(Census_AllAges / sum(Census_AllAges, na.rm = TRUE) * 100, 2),
+    Census_AdultsOnly_Pct = round(Census_AdultsOnly / sum(Census_AdultsOnly, na.rm = TRUE) * 100, 2),
+    Survey_Represented_Pct = round(Survey_AllAges / sum(Survey_AllAges, na.rm = TRUE) * 100, 2)
+  ) %>%
+  select(
+    City.area,
+    Census_AllAges, Census_AllAges_Pct,
+    Census_AdultsOnly, Census_AdultsOnly_Pct,
+    Survey_AllAges, Survey_Represented_Pct
+  ) %>%
+  arrange(desc(Census_AllAges))
+
+# Add column totals
+Total <- c("Total",colSums(CombinedSummary[2:7]))
+CombinedSummary<- rbind(CombinedSummary,Total)
+
+write.csv(CombinedSummary,file="SurveyCensusAreaSummary.csv")
 
 
 ```
 
+
 # 5.) how important is it to you to have an aquatic facility?
-      # - barplot (percentages) w/table (numbers and percentages)
-      # - re-rank to be from most to least important; if possible add percentage in text
-      # make the text bigger and boldeed
-      
+     
 ```{r}
 
 #remove skipped responses
@@ -693,15 +744,17 @@ plot <- ggplot(AgeAbility.df, aes(x = AgeGroup, y = Proportion, fill = SwimmingA
     axis.title.y = element_text(size = 14, face = "bold"),
     axis.text.y = element_text(size = 12, face = "bold"),
     legend.text = element_text(size = 12, face = "bold"),
-    legend.title = element_text(size = 14, face = "bold")
+    legend.title = element_text(size = 14, face = "bold"),
+    plot.background = element_rect(fill = "transparent", color = NA),
+    panel.background = element_rect(fill = "transparent", color = NA)
     )
 
-ggsave(here("figures","Age_Ability_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
+ggsave(here("figures","Age_Ability_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300,bg = "transparent")
 ```
 
+
 ## 7.) have you used an aquatic facility in last 2 years?
-      - keep as pie chart
-      
+    
 ```{r}
 
 # filter and format data for pie chart
@@ -714,24 +767,25 @@ colnames(Q7.df) <- c("Response","Freq")
 
 # Calculate the percentage for each category
 Q7.df <- Q7.df %>%
-      mutate(Percentage = round(100 * Q7.df$Freq / sum(Q7.df$Freq), 1))
+      mutate(
+        percentage = round(100 * Q7.df$Freq / sum(Q7.df$Freq), 1),
+        label = paste0(Response, " (", round(percentage, 1), "%)")
+      )
 
-# Create the pie chart with percentages
-plot <- ggplot(Q7.df, aes(x = "", y = Percentage, fill = Response)) +
-   geom_bar(stat = "identity", width = 1, show.legend = TRUE, color = "black") +
+# Plot the pie chart with percentages as text and white outlines
+plot <- ggplot(Q7.df, aes(x = "", y = percentage, fill = label)) +
+  geom_bar(stat = "identity", width = 0.5, show.legend = TRUE, color = "black") +
   coord_polar(theta = "y") +
-  scale_fill_viridis(discrete = TRUE) +
+  scale_fill_viridis(discrete = TRUE, name =  "Pool Usage") +
+  labs(
+    title = "Pool Usage withiin the Past 2 Years"
+  ) +
   theme_void() +
   theme(
-    legend.title = element_blank(),  # Remove the legend title
-    plot.title = element_text(size = 16, face = "bold"),  # Increase title size
-    legend.text = element_text(size = 14)  # Increase legend label size
-  ) +
-  labs(title = "Pool Usage in the Past 2 Yrs") +
-  geom_text(aes(label = paste(Percentage,"%")), 
-            position = position_stack(vjust = .5), 
-            color = "darkblue", size = 4, fontface = "bold") 
-
+    plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),
+    legend.text = element_text(size = 12, face = "bold"),
+    legend.title = element_text(size = 14, face = "bold"),
+  )
 # Print the pie chart
 print(plot)
 
@@ -741,94 +795,91 @@ ggsave(here("figures","Pool_Usage_2yrs.png"), plot = plot, width = 8, height = 6
 
       
 # 8.) which ones did you use? 
-      Still To-Do:
-          - include list of the 'other' pools
-          - shorten pool names for legibility
-          - consider clarity of labels, etc.
-
-```{r}
-#remove skipped responses
-Q8.dat <- filter(ResidentSurvey.dat,WhichAquaticFacilities != "")
-
-#add columns for each separated response, if needed to keep responses associated w/individual survey entries - this will still need some cleaning
-  # First, split the 'WhichAquaticFacilities' column based on commas
-  #split_data <- ResidentSurvey.dat %>%
-  #  # Separate 'WhichAquaticFacilities' into multiple columns
-  #  separate(WhichAquaticFacilities, into = paste0("place", 1:10), sep = ",", extra = "merge", fill   = #"right")
-
-#create a single column that contains all pools listed across the entire survey
-split_responses <- strsplit(as.character(ResidentSurvey.dat$WhichAquaticFacilities), split = ",")
   
-# Flatten the list into a single vector
-split_vector <- unlist(split_responses)
+```{r}
 
-#separate Other responses
-facility_vector <- split_vector[!grepl("^Other \\(Please specify\\)", split_vector) ]
-facility_list <- c("Port Angeles SHORE Aquatic Center",
-                    "Sequim Y",
-                    "Silverdale Y", 
-                    "Port Townsend Y/Mountain View Pool", 
-                     "Oak Harbor Community Pool",
-                     "North Kitsap Community Pool",
-                     "Olympic Aquatic Center - Bremerton", 
-                      "Bainbridge Island", 
-                      "Private/HOA pool (e.g. Port Ludlow")
+# Filter non-empty responses
+Q8.dat <- filter(ResidentSurvey.dat, WhichAquaticFacilities != "")
 
-# Filter the facility_vector based on whether its elements match the desired values
-facilities_clean <- facility_vector[facility_vector %in% facility_list]
-                  
-other_facilities <- ResidentSurvey.dat[
-  grepl("^Other \\(Please specify\\)", ResidentSurvey.dat$WhichAquaticFacilities),
-]
+# Define known full facility strings (not splitting anymore)
+facility_list <- c(
+  "Port Angeles SHORE Aquatic Center",
+  "Sequim Y",
+  "Silverdale Y",
+  "Port Townsend Y/Mountain View Pool",
+  "Oak Harbor Community Pool",
+  "North Kitsap Community Pool",
+  "Olympic Aquatic Center - Bremerton",
+  "Bainbridge Island",
+  "Private/HOA pool (e.g. Port Ludlow, Cape George, Kala Point)"
+)
 
-Facilities <- table(facilities_clean)
-Facilities <- as.data.frame(Facilities)
-colnames(Facilities) <- c("AquaticFacility","Frequency")
+# Function to extract facilities from a single response string
+extract_facilities <- function(response) {
+  found <- facility_list[str_detect(response, fixed(facility_list))]
+  if (length(found) == 0 && str_detect(response, "^Other \\(Please specify")) {
+    return("Other Pools")
+  } else if (length(found) == 0) {
+    return("Unmatched")  # for QA purposes
+  } else {
+    return(found)
+  }
+}
 
-Facilities <- Facilities %>%
+# Apply extraction function row-wise
+all_facilities <- unlist(lapply(Q8.dat$WhichAquaticFacilities, extract_facilities))
+
+# Count unmatched responses
+excluded_facilities_df <- as.data.frame(table(all_facilities)) %>%
+  filter(all_facilities == "Unmatched") %>%
+  rename(UnmatchedFacility = all_facilities)
+
+# Remove "Unmatched" from actual facility counts
+facility_counts <- as.data.frame(table(all_facilities)) %>%
+  filter(all_facilities != "Unmatched") %>%
+  rename(AquaticFacility = all_facilities, Frequency = Freq) %>%
+  mutate(Percent = round(100 * Frequency / sum(Frequency), 1))
+
+# Recode for nicer display
+facility_counts <- facility_counts %>%
   mutate(AquaticFacility = recode(AquaticFacility,
-                                  "Port Angeles SHORE Aquatic Center" = "SHORE Aquatic Center",
-                                  "Port Townsend Y/Mountain View Pool" = "Mountain View Pool",
-                                  "Private/HOA pool (e.g. Port Ludlow" = "Private/HOA Pool"))
+    "Port Angeles SHORE Aquatic Center" = "SHORE Aquatic Center",
+    "Port Townsend Y/Mountain View Pool" = "Mountain View Pool",
+    "Private/HOA pool (e.g. Port Ludlow, Cape George, Kala Point)" = "Private/HOA Pools"
+  ))
 
+# Reorder factor levels by descending percent
+facility_counts <- facility_counts %>%
+  arrange(desc(Percent)) %>%
+  mutate(AquaticFacility = factor(AquaticFacility, levels = AquaticFacility))
 
-# Reorder by the frequency (from most to least frequently used)
-# Sort by Frequency in descending order and reorder ImportanceRank
-Facilities <- Facilities %>%
-  arrange(desc(Frequency)) %>%
-    mutate(AquaticFacility = factor(AquaticFacility, levels = AquaticFacility))
-
-
-# Create the plot
-plot <- ggplot(Facilities, aes(x = AquaticFacility, y = Frequency, fill = "AquaticFacility")) +
-  geom_bar(stat = "identity", position = "dodge") +  # Dodge to separate the bars
-  scale_fill_viridis(discrete = TRUE) +  # Colorblind-friendly palette
+# Plot
+plot <- ggplot(facility_counts, aes(x = AquaticFacility, y = Percent, fill = "AquaticFacility")) +
+  geom_bar(stat = "identity") +
+   scale_fill_viridis(discrete = TRUE) +  
+  geom_text(aes(label = paste0(Percent, "%")), vjust = -0.5, size = 4.5, fontface = "bold") +
   labs(title = "Aquatic Facility Usage",
        x = "",
-       y = "Frequency",
-       fill = "")+
+       y = "Percentage of Mentions") +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
   theme_minimal() +
- theme(axis.text.x = element_text(angle = 45, hjust = 1,size = 12, face = "bold"),
-    plot.title = element_text(size = 20, face = "bold"),
-    axis.title.y = element_text(size = 15, face = "bold"),
-    axis.text.y = element_text(size = 12, face = "bold"),
-    legend.text = element_text(size = 12, face = "bold"),
-    legend.title = element_text(size = 14, face = "bold"),
-       plot.margin = margin(10, 10, 10, 20)
-    )+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12, face = "bold"),
+        axis.title.y = element_text(size = 14, face = "bold"),
+        plot.title = element_text(size = 18, face = "bold"),
+        axis.text.y = element_text(size = 12),
+        plot.margin = margin(20, 20, 30, 20))+
   guides(fill = "none")
 
-# Print the plot
+# Print and save
 print(plot)
-ggsave(here("figures","AquaticFacilityUse_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
+ggsave(here("figures", "AquaticFacilityUse_Percent_Fig.png"),
+       plot = plot, width = 8, height = 6, dpi = 300)
 
 ```
 
+
 # 10.) aquatic amenities
-      # - produce age-based figures as well, may not use in presentation
-      # - select top 5 per age group
-      # - work on a way to bin household ages (mean household age) - if we have time??
-      
+
 ```{r}
 # Select the Amenities questions only for easier formatting
 # Select only the AquaAmenities columns
@@ -895,6 +946,8 @@ plot <- ggplot(count_data, aes(x = factor(AquaticAmenity, levels = ordered_ameni
 # Print the plot
 print(plot)
 ggsave(here("figures","AquaticAmenities_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300)
+
+
 ```
 
 
@@ -1273,7 +1326,8 @@ ggsave(here("figures","RecAmenities_AllAgesMatrix.png"), plot = plot)
 ```
 
 
-# 12.) How much more would you use an aquatic facility, if it had preferred amenities?
+# 12.) How much more would you use an aquatic facility, if it had preffered amenities?
+
 - also includes Q9 and usage for a recreation facility
     
 ```{r}
@@ -1332,9 +1386,9 @@ usage_comparison$Response <- factor(usage_comparison$Response,
 # Plot
 plot <- ggplot(usage_comparison, aes(x = Response, y = Percentage, fill = UsageCategory)) +
   geom_bar(stat = "identity", position = position_dodge(width = 0.9)) +
-  geom_text(aes(label = paste0(Percentage, "%")),
-            position = position_dodge(width = 0.9), 
-            vjust = -0.5, size = 4.5, fontface = "bold") +
+  #(aes(label = paste0(Percentage, "%")),
+   #         position = position_dodge(width = 0.9), 
+     #       vjust = -0.5, size = 4.5, fontface = "bold") +
   scale_y_continuous(limits = c(0, 50), breaks = seq(0, 50, 10)) +
   scale_fill_manual(values = c("#49006a", "#ffd92f")) +
   labs(title = "Aquatic Facility Usage",
@@ -1348,12 +1402,17 @@ plot <- ggplot(usage_comparison, aes(x = Response, y = Percentage, fill = UsageC
         plot.title = element_text(size = 18, face = "bold"),
         legend.title = element_text(size = 12, face = "bold"),
         legend.text = element_text(size = 11, face = "bold"),
-        plot.margin = margin(t = 10, r = 10, b = 20, l = 80)  # Top, Right, Bottom, Left
+        plot.margin = margin(t = 10, r = 10, b = 20, l = 80),
+        plot.background = element_rect(fill = "transparent", color = NA),
+        panel.background = element_rect(fill = "transparent", color = NA)
+     
   )
 
 ggsave(here("figures","UsageRatePercentChange_Fig.png"), plot = plot, width = 8, height = 6, units = "in", dpi = 300) 
    
 ```
+
+
 # Create Sankey plot to show change in aquatic user sentiment before/after preferred amenities
 
 ```{r}
@@ -1487,7 +1546,7 @@ write.csv(summary_table, file="TaxSupportSummaryTable.csv")
 ```
 
 
-# characterize individuals wioth most extreme changes in usage patters with/without preferred amenities 
+# characterize individuals with most extreme changes in usage patters with/without preferred amenities 
 
 ```{r}
 
@@ -1571,8 +1630,31 @@ ggsave(here("figures", "CurrentNonAquaticUsageRates_Fig.png"),
        plot = plot, width = 8, height = 6, units = "in", dpi = 300)
 ```
 
+# cross tab of users of non-aquatic facilities only
 
-  
+```{r}
+NonAquaticOnly.dat <- ResidentSurvey.dat %>% 
+  filter(AquaAmenities_UsageRate == "Never")%>%  
+  filter(RecAmenities_UsageRate %in% c("More than once a week", "Several times a month", "Less than once a month")) %>%
+    count(RecAmenities_UsageRate) %>%
+    mutate(
+        Percentage = round(n / sum(n) * 100, 1),
+        Response = factor(RecAmenities_UsageRate, levels = c("More than once a week", 
+                                                          "Several times a month", 
+                                                          "Less than once a month", 
+                                                          "Never"))
+    ) %>%
+    select(Response, Count = n, Percentage)
+
+RecOnlyID <- NonAquaticOnly.dat$Response.ID
+RecOnlyComments <- Comment.dat %>%
+  filter(Response.ID %in% RecOnlyID)
+
+
+
+```
+
+
 # 14.) tax Q
 
 # create pie charts of tax support, with and without weighting
@@ -1630,6 +1712,7 @@ ggsave(here("figures","TaxSupport_Fig.png"), plot = plot, width = 8, height = 6,
 
 # Filter, recode, and apply weights from the weighted dataset
 tax_weighted <- survey_weighted %>%
+  #tax_weighted <- survey_tax_weighted %>% # using tax question-only weights is an insignificant difference - only .1% change in yes/no responses
   select(Response.ID, Age, City.area, RateNewPoolImportance, TaxSupport, Weight) %>%
   filter(TaxSupport %in% c("Yes", "No", "I don't know/need more information")) %>%
   mutate(TaxSupport = ifelse(

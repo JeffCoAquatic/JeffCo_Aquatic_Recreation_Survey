@@ -154,7 +154,7 @@ colnames(ip_freq_df) <- c("IP.address", "Frequency")
 plus4 <- filter(ip_freq_df,Frequency>4)
 
 # create a barplot of IP address usage for flagged data
-top_ips <- data[order(-plus4$Frequency), ]
+top_ips <- plus4[order(-plus4$Frequency), ]
 AnonID <- paste("Unique IP",1:length(top_ips$IP.address),sep=" ")
 top_ips$IP.address <- AnonID
 
