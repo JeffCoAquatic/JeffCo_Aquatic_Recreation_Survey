@@ -1873,7 +1873,7 @@ plot_percent <- TaxArea_weighted %>%
   scale_fill_viridis(discrete = TRUE) +
   labs(
     title = "Percentage of Tax Support by Area",
-    subtitle = "Weighted by Age and City/Area",
+    subtitle = "Weighted",
     x = "", 
     y = "Percentage of Responses",
     fill = "Tax Support"
@@ -1914,7 +1914,7 @@ plot_count <- TaxArea_weighted %>%
   scale_fill_viridis(discrete = TRUE) +
   labs(
     title = "Tax Support by Area in Numbers",
-    subtitle = "Weighted by Age and City/Area",
+    subtitle = "Weighted",
     x = "", 
     y = "Weighted Responses",
     fill = "Tax Support"
